@@ -116,6 +116,7 @@ func (s *Ethereum) SetContractBackend(backend bind.ContractBackend) {
 	}
 }
 
+// Initial commit of go-drb project!
 // New creates a new Ethereum object (including the
 // initialisation of the common Ethereum object)
 func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
