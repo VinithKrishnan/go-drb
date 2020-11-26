@@ -139,10 +139,6 @@ func (sb *backend) VerifyHeader(chain consensus.ChainReader, header *types.Heade
 // caller may optionally pass in a batch of parents (ascending order) to avoid
 // looking those up from the database. This is useful for concurrently verifying
 // a batch of new headers.
-
-// @sourav, update this verifyHeader to use the original validators
-// set wherever necessary!
-
 func (sb *backend) verifyHeader(chain consensus.ChainReader, header *types.Header, parents []*types.Header) error {
 	if header.Number == nil {
 		return errUnknownBlock
@@ -444,7 +440,6 @@ func (sb *backend) Seal(chain consensus.ChainReader, block *types.Block, results
 	if err != nil {
 		return err
 	}
-	// @sourav, remove this check to allow for emtpy valsets!
 	if _, v := snap.ValSet.GetByAddress(sb.address); v == nil {
 		return errUnauthorized
 	}
@@ -497,6 +492,24 @@ func (sb *backend) Seal(chain consensus.ChainReader, block *types.Block, results
 		}
 	}()
 	return nil
+}
+
+// checkAuthority checks whether the author the block is eligible to
+// create blocks or not using the list of validators from the genesis block.
+func checkAuthority(chain consensus.ChainReader, addr common.Address) error {
+	genesis := chain.GetHeaderByNumber(0)
+	istanbulExtra, err := types.ExtractIstanbulExtra(genesis)
+	if err != nil {
+		return err
+	}
+
+	// Checking whether the sb.address is a valid address or not
+	for _, val := range istanbulExtra.Validators {
+		if addr == val {
+			return nil
+		}
+	}
+	return errUnauthorized
 }
 
 // update timestamp and signature of the block based on its number of transactions

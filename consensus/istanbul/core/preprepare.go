@@ -77,9 +77,6 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 		return err
 	}
 
-	// @sourav, update this to check from the initial valSet instead of
-	// current valSet
-
 	// Check if the message comes from current proposer
 	if !c.valSet.IsProposer(src.Address()) {
 		logger.Warn("Ignore preprepare messages from non-proposer")

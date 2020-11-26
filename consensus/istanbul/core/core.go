@@ -157,7 +157,6 @@ func (c *core) currentView() *istanbul.View {
 	}
 }
 
-// @sourav, update this to use the valSet of the genesis block!
 func (c *core) IsProposer() bool {
 	v := c.valSet
 	if v == nil {
