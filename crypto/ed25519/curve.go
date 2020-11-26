@@ -11,7 +11,7 @@ package ed25519
 */
 import "C"
 import (
-	"fmt"
+	// "fmt"
 	// "math"
 	"math/big"
 	"errors"
@@ -106,7 +106,7 @@ func Point_from_uniform(data []byte) (Point,error) {  // TODO:check if it return
 
 // Checks if given point is valid
 func (p Point) Is_valid() (C.int){
-	return (C.crypto_core_ed25519_Is_valid_point((*C.uchar)(&p.val[0])))
+	return (C.crypto_core_ed25519_is_valid_point((*C.uchar)(&p.val[0])))
 }
 
 // raises base to power s
@@ -180,7 +180,7 @@ func (p Point) Copy() (Point) {
 // Base point B of curve
 var B_x, _ = new(big.Int).SetString("15112221349535400772501151409588531511454012693041857206046113283949847762202",10)
 var B_y, _ = new(big.Int).SetString("46316835694926478169428394003475163141307993866256225615783033603165251855960",10)
-var pt = New_point(*B_x,*B_y)
+var B = New_point(*B_x,*B_y)
 
 // Point One on curve
 var ONE = Point_one()
@@ -434,24 +434,24 @@ func Verify_detached(message []byte,signature []byte,public_key Point) (bool) { 
 	return false
 }
 
+// Testing functionality (will be removed later)
+// func main(){
 
-func main(){
+// 	u := new(big.Int)
+// 	d := new(big.Int)
+// 	u, _ = u.SetString("15112221349535400772501151409588531511454012693041857206046113283949847762202",10)
+// 	d, _ = d.SetString("46316835694926478169428394003475163141307993866256225615783033603165251855960",10)
+// 	pt:= New_point(*u,*d)
+// 	fmt.Println(pt.val)
+// 	fmt.Println(pt.Sign())
+// 	// fmt.Println(C.crypto_core_ed25519_Is_valid_point((*C.uchar)(&pt.val[0])))
+// 	fmt.Println(pt.Is_valid())
+// 	s := New_scalar(*big.NewInt(0))
+// 	fmt.Println(s.val)
+// 	token := make([]byte,32)
+// 	// fmt.Println(C.crypto_scalarmult_ed25519_base_noclamp((*C.uchar)(&token[0]),(*C.uchar)(&s.val[0])))
+// 	C.crypto_scalarmult_ed25519_noclamp((*C.uchar)(&token[0]),(*C.uchar)(&s.val[0]),(*C.uchar)(&pt.val[0]));
+// 	fmt.Println(token)
+// 	fmt.Println(C.crypto_core_ed25519_is_valid_point((*C.uchar)(&token[0])))
 
-	u := new(big.Int)
-	d := new(big.Int)
-	u, _ = u.SetString("15112221349535400772501151409588531511454012693041857206046113283949847762202",10)
-	d, _ = d.SetString("46316835694926478169428394003475163141307993866256225615783033603165251855960",10)
-	pt:= New_point(*u,*d)
-	fmt.Println(pt.val)
-	fmt.Println(pt.Sign())
-	// fmt.Println(C.crypto_core_ed25519_Is_valid_point((*C.uchar)(&pt.val[0])))
-	fmt.Println(pt.Is_valid())
-	s := New_scalar(*big.NewInt(0))
-	fmt.Println(s.val)
-	token := make([]byte,32)
-	// fmt.Println(C.crypto_scalarmult_ed25519_base_noclamp((*C.uchar)(&token[0]),(*C.uchar)(&s.val[0])))
-	C.crypto_scalarmult_ed25519_noclamp((*C.uchar)(&token[0]),(*C.uchar)(&s.val[0]),(*C.uchar)(&pt.val[0]));
-	fmt.Println(token)
-	fmt.Println(C.crypto_core_ed25519_Is_valid_point((*C.uchar)(&token[0])))
-
-}
+// }
