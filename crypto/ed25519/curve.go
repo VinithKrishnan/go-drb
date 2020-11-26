@@ -1,4 +1,4 @@
-package main
+package ed25519
 
 
 /*
@@ -508,36 +508,36 @@ func Verify_detached(message []byte,signature []byte,public_key Point) (bool) { 
 }
 
 // Testing functionality (will be removed later)
-func main(){
+// func main(){
 
-	u := new(big.Int)
-	d := new(big.Int)
-	u, _ = u.SetString("15112221349535400772501151409588531511454012693041857206046113283949847762202",10)
-	d, _ = d.SetString("46316835694926478169428394003475163141307993866256225615783033603165251855960",10)
-	pt:= New_point(*u,*d)
-	fmt.Println(pt.val)
-	fmt.Println(pt.Sign())
-	pt2:=Raw_point()
-	copy(pt2.val,pt.val)
-	sum:=pt.Add(pt2)
-	fmt.Println(sum)
-	diff:= sum.Sub(pt2)
-	fmt.Println(diff)
-	two:= big.NewInt(2)
-	Scalar_2:= New_scalar(*two)
-	fmt.Println(pt.Mul(Scalar_2))
-	fmt.Println(Random().val)
-	// fmt.Println(C.crypto_core_ed25519_Is_valid_point((*C.uchar)(&pt.val[0])))
-	fmt.Println(pt.Is_valid())
-	s := New_scalar(*big.NewInt(2))
-	// e := New_scalar(*big.NewInt(3))
-	t,_:=s.Inverse()
-	fmt.Println(t.Mul(s))
-	token := make([]byte,32)
+// 	u := new(big.Int)
+// 	d := new(big.Int)
+// 	u, _ = u.SetString("15112221349535400772501151409588531511454012693041857206046113283949847762202",10)
+// 	d, _ = d.SetString("46316835694926478169428394003475163141307993866256225615783033603165251855960",10)
+// 	pt:= New_point(*u,*d)
+// 	fmt.Println(pt.val)
+// 	fmt.Println(pt.Sign())
+// 	pt2:=Raw_point()
+// 	copy(pt2.val,pt.val)
+// 	sum:=pt.Add(pt2)
+// 	fmt.Println(sum)
+// 	diff:= sum.Sub(pt2)
+// 	fmt.Println(diff)
+// 	two:= big.NewInt(2)
+// 	Scalar_2:= New_scalar(*two)
+// 	fmt.Println(pt.Mul(Scalar_2))
+// 	fmt.Println(Random().val)
+// 	// fmt.Println(C.crypto_core_ed25519_Is_valid_point((*C.uchar)(&pt.val[0])))
+// 	fmt.Println(pt.Is_valid())
+// 	s := New_scalar(*big.NewInt(2))
+// 	// e := New_scalar(*big.NewInt(3))
+// 	t,_:=s.Inverse()
+// 	fmt.Println(t.Mul(s))
+// 	token := make([]byte,32)
 
-	// fmt.Println(C.crypto_scalarmult_ed25519_base_noclamp((*C.uchar)(&token[0]),(*C.uchar)(&s.val[0])))
-	C.crypto_scalarmult_ed25519_noclamp((*C.uchar)(&token[0]),(*C.uchar)(&s.val[0]),(*C.uchar)(&pt.val[0]));
-	fmt.Println(token)
-	fmt.Println(C.crypto_core_ed25519_is_valid_point((*C.uchar)(&token[0])))
+// 	// fmt.Println(C.crypto_scalarmult_ed25519_base_noclamp((*C.uchar)(&token[0]),(*C.uchar)(&s.val[0])))
+// 	C.crypto_scalarmult_ed25519_noclamp((*C.uchar)(&token[0]),(*C.uchar)(&s.val[0]),(*C.uchar)(&pt.val[0]));
+// 	fmt.Println(token)
+// 	fmt.Println(C.crypto_core_ed25519_is_valid_point((*C.uchar)(&token[0])))
     
-}
+// }
