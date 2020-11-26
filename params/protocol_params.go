@@ -135,6 +135,7 @@ const (
 	Bn256PairingPerPointGasByzantium uint64 = 80000  // Byzantium per-point price for an elliptic curve pairing check
 	Bn256PairingPerPointGasIstanbul  uint64 = 34000  // Per-point price for an elliptic curve pairing check
 
+	// @sourav, update this to accomodate large number of nodes
 	QuorumMaximumExtraDataSize uint64 = 65 // Maximum size extra data may be after Genesis.
 	// Quorum - payload for a transaction, the size of the buffer to 128kb to match the maximum allowed in chain config
 	QuorumMaxPayloadBufferSize uint64 = 128

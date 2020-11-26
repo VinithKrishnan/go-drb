@@ -139,6 +139,10 @@ func (sb *backend) VerifyHeader(chain consensus.ChainReader, header *types.Heade
 // caller may optionally pass in a batch of parents (ascending order) to avoid
 // looking those up from the database. This is useful for concurrently verifying
 // a batch of new headers.
+
+// @sourav, update this verifyHeader to use the original validators
+// set wherever necessary!
+
 func (sb *backend) verifyHeader(chain consensus.ChainReader, header *types.Header, parents []*types.Header) error {
 	if header.Number == nil {
 		return errUnknownBlock
@@ -440,6 +444,7 @@ func (sb *backend) Seal(chain consensus.ChainReader, block *types.Block, results
 	if err != nil {
 		return err
 	}
+	// @sourav, remove this check to allow for emtpy valsets!
 	if _, v := snap.ValSet.GetByAddress(sb.address); v == nil {
 		return errUnauthorized
 	}

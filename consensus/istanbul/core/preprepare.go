@@ -40,6 +40,11 @@ func (c *core) sendPreprepare(request *istanbul.Request) {
 			Code: msgPreprepare,
 			Msg:  preprepare,
 		})
+
+		// @sourav
+		// To add the part of privately sending each vector to every node!
+		// Make sure to include the Merkle root in the message!
+
 	}
 }
 
@@ -72,6 +77,9 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 		return err
 	}
 
+	// @sourav, update this to check from the initial valSet instead of
+	// current valSet
+
 	// Check if the message comes from current proposer
 	if !c.valSet.IsProposer(src.Address()) {
 		logger.Warn("Ignore preprepare messages from non-proposer")
@@ -96,6 +104,9 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 		}
 		return err
 	}
+
+	// @sourav
+	// Check validity of the recived proposal using the PVSS layer messages!
 
 	// Here is about to accept the PRE-PREPARE
 	if c.state == StateAcceptRequest {

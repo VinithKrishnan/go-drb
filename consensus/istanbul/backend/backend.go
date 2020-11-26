@@ -193,6 +193,11 @@ func (sb *backend) Commit(proposal istanbul.Proposal, seals [][]byte) error {
 		return nil
 	}
 
+	// @sourav
+	// We might be able to skip the following code as we will
+	// not have any transactions, i.e., the header of the block
+	// is all what we need!
+
 	if sb.broadcaster != nil {
 		sb.broadcaster.Enqueue(fetcherID, block)
 	}

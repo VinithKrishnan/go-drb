@@ -568,6 +568,11 @@ func (w *worker) resultLoop() {
 	for {
 		select {
 		case block := <-w.resultCh:
+
+			// @sourav
+			// The controls returns here whenever a block gets committed!
+			// We can start the reconstruction phase here.
+
 			// Short circuit when receiving empty result.
 			if block == nil {
 				continue
