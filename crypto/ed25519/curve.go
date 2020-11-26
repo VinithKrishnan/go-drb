@@ -11,7 +11,7 @@ package ed25519
 */
 import "C"
 import (
-	"fmt"
+	// "fmt"
 	// "math"
 	"math/big"
 	"errors"
