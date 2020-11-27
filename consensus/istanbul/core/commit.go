@@ -73,8 +73,7 @@ func (c *core) handleCommit(msg *message, src istanbul.Validator) error {
 	// If we already have a proposal, we may have chance to speed up the consensus process
 	// by committing the proposal without PREPARE messages.
 	if c.current.Commits.Size() >= c.QuorumSize() && c.state.Cmp(StateCommitted) < 0 {
-		//@sourav
-		// Here we might have to add an event to start the reconsturction
+		// @sourav, Here we might have to add an event to start the reconsturction
 		// phase of the protocol!
 		// It might be easier to start the reconstruction somewhere else
 		// as such a design will keep the consensus layer intact!

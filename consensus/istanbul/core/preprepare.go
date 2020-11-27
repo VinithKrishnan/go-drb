@@ -41,8 +41,7 @@ func (c *core) sendPreprepare(request *istanbul.Request) {
 			Msg:  preprepare,
 		})
 
-		// @sourav
-		// To add the part of privately sending each vector to every node!
+		// @sourav To add the part of privately sending each vector to every node!
 		// Make sure to include the Merkle root in the message!
 
 	}
@@ -102,9 +101,7 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 		return err
 	}
 
-	// @sourav
-	// Check validity of the recived proposal using the PVSS layer messages!
-
+	// @sourav, Check validity of the recived proposal using the PVSS layer messages!
 	// Here is about to accept the PRE-PREPARE
 	if c.state == StateAcceptRequest {
 		// Send ROUND CHANGE if the locked proposal and the received proposal are different
