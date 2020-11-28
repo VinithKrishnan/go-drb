@@ -36,7 +36,7 @@ type Point struct {
 
 	x big.Int  // x coordinate  // TODO: Remove x and y coordiantes
 	y big.Int  // y coordinate
-	val []byte // y_packed value in little endian format
+	Val []byte // y_packed value in little endian format
 
 }
 
@@ -82,7 +82,7 @@ func Point_from_bytes(value []byte) (Point,error) {
 		return Raw_point(),errors.New("must be of len 32")
 	}
 	result:= Raw_point()
-	result.val = value
+	result.Val = value
 	if result.Is_valid()==0 {
 		return Raw_point(),errors.New("not a valid point value")
 	}
@@ -98,7 +98,7 @@ func Point_from_uniform(data []byte) (Point,error) {  // TODO:check if it return
 		data = append(data,0)
 	}
 	temp := Raw_point()
-	if C.crypto_core_ed25519_from_uniform((*C.uchar)(&temp.val[0]), (*C.uchar)(&data[0])) == 0 {
+	if C.crypto_core_ed25519_from_uniform((*C.uchar)(&temp.Val[0]), (*C.uchar)(&data[0])) == 0 {
 		return temp,nil
 	}
 	return temp,errors.New("from uniform op not working")
@@ -107,13 +107,13 @@ func Point_from_uniform(data []byte) (Point,error) {  // TODO:check if it return
 
 // Checks if given point is valid
 func (p Point) Is_valid() (C.int){
-	return (C.crypto_core_ed25519_is_valid_point((*C.uchar)(&p.val[0])))
+	return (C.crypto_core_ed25519_is_valid_point((*C.uchar)(&p.Val[0])))
 }
 
 // raises base to power s
 func Base_times(s Scalar) (Point,error) {
 	temp := Raw_point()
-	if C.crypto_scalarmult_ed25519_base_noclamp((*C.uchar)(&temp.val[0]),(*C.uchar)(&s.val[0])) == 0 {
+	if C.crypto_scalarmult_ed25519_base_noclamp((*C.uchar)(&temp.Val[0]),(*C.uchar)(&s.Val[0])) == 0 {
 		return temp,nil
 	}
 	return temp,errors.New("calarmult_ed25519_base_noclamp not working")
@@ -123,28 +123,28 @@ func Base_times(s Scalar) (Point,error) {
 
 // returns sign +/- of point
 func (p Point) Sign() (int64) {
-	num, _ :=strconv.Atoi(string(p.val[len(p.val)-1]))
+	num, _ :=strconv.Atoi(string(p.Val[len(p.Val)-1]))
 	tempnum:= (int64(num)/128)
 	return tempnum
 }
 
 func (p Point) Equal(o Point) (bool) { //TODO test function
-	if bytes.Equal(p.val,o.val) {
+	if bytes.Equal(p.Val,o.Val) {
 		return true
 	}
-	return (C.sodium_memcmp(unsafe.Pointer(&p.val[0]), unsafe.Pointer(&o.val[0]) , 32) == 0)
+	return (C.sodium_memcmp(unsafe.Pointer(&p.Val[0]), unsafe.Pointer(&o.Val[0]) , 32) == 0)
 }
 
 func (p Point) Not_equal(o Point) (bool) { //TODO test function
-	if !bytes.Equal(p.val,o.val) {
+	if !bytes.Equal(p.Val,o.Val) {
 		return true
 	}
-	return !(C.sodium_memcmp(unsafe.Pointer(&p.val[0]), unsafe.Pointer(&o.val[0]) , 32) == 0)
+	return !(C.sodium_memcmp(unsafe.Pointer(&p.Val[0]), unsafe.Pointer(&o.Val[0]) , 32) == 0)
 }
 
 func (p Point) Add(o Point) (Point) { // removed error handling
 	result:= Raw_point()
-	if C.crypto_core_ed25519_add((*C.uchar)(&result.val[0]), (*C.uchar)(&p.val[0]), (*C.uchar)(&o.val[0])) == 0 {
+	if C.crypto_core_ed25519_add((*C.uchar)(&result.Val[0]), (*C.uchar)(&p.Val[0]), (*C.uchar)(&o.Val[0])) == 0 {
 		return result
 	}
 	return result
@@ -153,7 +153,7 @@ func (p Point) Add(o Point) (Point) { // removed error handling
 
 func (p Point) Sub(o Point) (Point) { //removed error handling
 	result:= Raw_point()
-	if C.crypto_core_ed25519_sub((*C.uchar)(&result.val[0]), (*C.uchar)(&p.val[0]), (*C.uchar)(&o.val[0])) == 0 {
+	if C.crypto_core_ed25519_sub((*C.uchar)(&result.Val[0]), (*C.uchar)(&p.Val[0]), (*C.uchar)(&o.Val[0])) == 0 {
 		return result
 	}
 	return result
@@ -161,7 +161,7 @@ func (p Point) Sub(o Point) (Point) { //removed error handling
 
 func (p Point) Mul(s Scalar) (Point) {  // removed error handling
 	temp := Raw_point()
-	if C.crypto_scalarmult_ed25519_noclamp((*C.uchar)(&temp.val[0]),(*C.uchar)(&s.val[0]),(*C.uchar)(&p.val[0])) == 0 {
+	if C.crypto_scalarmult_ed25519_noclamp((*C.uchar)(&temp.Val[0]),(*C.uchar)(&s.Val[0]),(*C.uchar)(&p.Val[0])) == 0 {
 		return temp
 	}
 	return temp
@@ -169,12 +169,12 @@ func (p Point) Mul(s Scalar) (Point) {  // removed error handling
 
 
 func (p Point) Bytes() ([] byte) {
-	return p.val
+	return p.Val
 }
 
 func (p Point) Copy() (Point) {
 	temp:= Raw_point()
-	copy(temp.val,p.val)
+	copy(temp.Val,p.Val)
 	return temp
 }
 
@@ -191,7 +191,7 @@ var ONE = Point_one()
 // ----------------------------------------------------------------------------------
 type Scalar struct {
 	bint big.Int// bigint value
-	val []byte //little endian rep of bint
+	Val []byte //little endian rep of bint
 }
 
 	
@@ -223,17 +223,17 @@ func Scalar_from_bytes(data []byte) (Scalar,error) {
 		copy_data[i], copy_data[j] = copy_data[j], copy_data[i]
 	}
 	sc.bint = *new(big.Int).SetBytes(copy_data)
-	sc.val = data
+	sc.Val = data
 	return sc,nil
 
 }
 // set/refresh value of bint from val
 func (sc Scalar) Refresh_bint() {
-	copy_data := make([]byte,len(sc.val))
-	if len(sc.val)!= 32 {
+	copy_data := make([]byte,len(sc.Val))
+	if len(sc.Val)!= 32 {
 	// print error
 	}
-	copy(copy_data,sc.val)
+	copy(copy_data,sc.Val)
 	for i, j := 0, len(copy_data)-1; i < j; i, j = i+1, j-1 { // reversal of bytes
 		copy_data[i], copy_data[j] = copy_data[j], copy_data[i]
 	}
@@ -245,7 +245,7 @@ func Scalar_reduce(data []byte) (Scalar) {
            // typically the output of a cryptographic hashfunction
 	scalar:=Raw_scalar()
 	if len(data)>=40 {
-		C.crypto_core_ed25519_scalar_reduce((*C.uchar)(&scalar.val[0]),(*C.uchar)(&data[0]))
+		C.crypto_core_ed25519_scalar_reduce((*C.uchar)(&scalar.Val[0]),(*C.uchar)(&data[0]))
 	}
 	scalar.Refresh_bint()
 	return scalar
@@ -269,19 +269,19 @@ func (s Scalar) Equal(o Scalar) (bool){ // Test this function
 	// if reflect.DeepEqual(s,o) {
 	// 	return true
 	// }
-	return C.sodium_memcmp(unsafe.Pointer(&s.val[0]), unsafe.Pointer(&o.val[0]) , 32)==0
+	return C.sodium_memcmp(unsafe.Pointer(&s.Val[0]), unsafe.Pointer(&o.Val[0]) , 32)==0
 }
 
 func (s Scalar) Not_equal(o Scalar) (bool){ // Test this function
 	// if reflect.DeepEqual(s,o) {
 	// 	return false
 	// }
-	return C.sodium_memcmp(unsafe.Pointer(&s.val[0]), unsafe.Pointer(&o.val[0]) , 32)!=0
+	return C.sodium_memcmp(unsafe.Pointer(&s.Val[0]), unsafe.Pointer(&o.Val[0]) , 32)!=0
 }
 
 func (a Scalar) Add(b Scalar) (Scalar) { 
   result:= Raw_scalar()
-  C.crypto_core_ed25519_scalar_add((*C.uchar)(&result.val[0]), (*C.uchar)(&a.val[0]), (*C.uchar)(&b.val[0]))
+  C.crypto_core_ed25519_scalar_add((*C.uchar)(&result.Val[0]), (*C.uchar)(&a.Val[0]), (*C.uchar)(&b.Val[0]))
   result.Refresh_bint()
   return result
 
@@ -290,20 +290,20 @@ func (a Scalar) Add(b Scalar) (Scalar) {
 
 func (a Scalar) Sub(b Scalar) (Scalar) { 
 	result:= Raw_scalar()
-	C.crypto_core_ed25519_scalar_sub((*C.uchar)(&result.val[0]), (*C.uchar)(&a.val[0]), (*C.uchar)(&b.val[0])) 
+	C.crypto_core_ed25519_scalar_sub((*C.uchar)(&result.Val[0]), (*C.uchar)(&a.Val[0]), (*C.uchar)(&b.Val[0])) 
 	result.Refresh_bint()
 	return result
 }
 
 func (a Scalar) Mul(b Scalar) (Scalar) { 
 	result:= Raw_scalar()
-	C.crypto_core_ed25519_scalar_mul((*C.uchar)(&result.val[0]), (*C.uchar)(&a.val[0]), (*C.uchar)(&b.val[0]))
+	C.crypto_core_ed25519_scalar_mul((*C.uchar)(&result.Val[0]), (*C.uchar)(&a.Val[0]), (*C.uchar)(&b.Val[0]))
 	result.Refresh_bint()
 	return result
 }
 
 func (a Scalar) Div(b Scalar) (Scalar) { 
-	inv,_:=b.Inverse()
+	inv:=b.Inverse()
 	return a.Mul(inv)
 }
 
@@ -311,15 +311,15 @@ func (a Scalar) Neg() (Scalar) {
 	//compute the negation of the current scalar as new scalar
 	// a + neg = 0 (mod CURVE_ORDER)
 	result:=Raw_scalar()
-	C.crypto_core_ed25519_scalar_negate((*C.uchar)(&result.val[0]),(*C.uchar)(&a.val[0]))
+	C.crypto_core_ed25519_scalar_negate((*C.uchar)(&result.Val[0]),(*C.uchar)(&a.Val[0]))
 	result.Refresh_bint()
 	return result
 }
 
 // a^b
 func (a Scalar) Pow(b Scalar) (Scalar) { 
-	a_int,_ := Scalar_from_bytes(a.val)
-	b_int,_ := Scalar_from_bytes(b.val)
+	a_int,_ := Scalar_from_bytes(a.Val)
+	b_int,_ := Scalar_from_bytes(b.Val)
 	result_int := new(big.Int).Exp(&a_int.bint,&b_int.bint,nil)
 	return New_scalar(*result_int)
 }
@@ -327,27 +327,27 @@ func (a Scalar) Pow(b Scalar) (Scalar) {
 func (a Scalar)Negate() { 
 	//compute the negation of the current scalar inplace
 	// a + neg = 0 (mod CURVE_ORDER) using crypto_core_ed25519_scalar_negate
-	C.crypto_core_ed25519_scalar_negate((*C.uchar)(&a.val[0]),(*C.uchar)(&a.val[0]))
+	C.crypto_core_ed25519_scalar_negate((*C.uchar)(&a.Val[0]),(*C.uchar)(&a.Val[0]))
 	a.Refresh_bint()
 }
 
-func (a Scalar) Inverse() (Scalar,error) { 
+func (a Scalar) Inverse() (Scalar) {  // TODO: error handling
 	// return a new Scalar with is the multiplicate inverse of the current one
 	result:= Raw_scalar()
-	C.crypto_core_ed25519_scalar_invert((*C.uchar)(&result.val[0]),(*C.uchar)(&a.val[0]));
+	C.crypto_core_ed25519_scalar_invert((*C.uchar)(&result.Val[0]),(*C.uchar)(&a.Val[0]));
 	result.Refresh_bint()
-	return result,nil
+	return result
 }
 
 
 // compute the multiplicate inverse of the current scalar inplace
 func (a Scalar) Invert() { 
-	C.crypto_core_ed25519_scalar_invert((*C.uchar)(&a.val[0]),(*C.uchar)(&a.val[0]));
+	C.crypto_core_ed25519_scalar_invert((*C.uchar)(&a.Val[0]),(*C.uchar)(&a.Val[0]));
 	a.Refresh_bint()
 }
 
 func (a Scalar) Bytes() ([] byte) {
-	return a.val
+	return a.Val
 }
 
 func (a Scalar) Int() (big.Int){
@@ -357,7 +357,7 @@ func (a Scalar) Int() (big.Int){
 func (a Scalar) Copy() (Scalar) {
 	cpy:= Raw_scalar()
 	cpy.bint = a.bint 
-	copy(cpy.val,a.val)
+	copy(cpy.Val,a.Val)
 	return cpy
 }
 
@@ -365,11 +365,11 @@ func (a Scalar) Copy() (Scalar) {
 // ---------------------------------------------
 
 type SecretKey struct {
-	val []byte
+	Val []byte
 }
 
 func (sk SecretKey) Bytes() ([] byte) { // TODO: return a copy?
-	return sk.val
+	return sk.Val
 }
 
 func H(message []byte) (Scalar) {  //TODO test this function
@@ -457,10 +457,10 @@ func (kp KeyPair) Init(seed []byte) {
 	kp.public_key = Raw_point()
 	barray := make([]byte,64)
 	kp.secret_key = SecretKey{barray}
-	if C.crypto_sign_seed_keypair((*C.uchar)(&kp.public_key.val[0]),(*C.uchar)(&kp.secret_key.val[0]),(*C.uchar)(&seed[0])) !=0 {
+	if C.crypto_sign_seed_keypair((*C.uchar)(&kp.public_key.Val[0]),(*C.uchar)(&kp.secret_key.Val[0]),(*C.uchar)(&seed[0])) !=0 {
 		panic("crypto_sign_seed_keypair not working")
 	}
-	kp.seed = kp.secret_key.val[:32]
+	kp.seed = kp.secret_key.Val[:32]
 	has:= sha512.New()
 	has.Write(kp.seed)
 	bs := has.Sum(nil)
@@ -492,7 +492,7 @@ func Random_kp() (KeyPair) {
 func Sign_detached(message []byte,secret_key SecretKey) ([] byte) { 
 	sig:= make([]byte,64)
 	temp:= C.ulonglong(0)
-	if C.crypto_sign_detached((*C.uchar)(&sig[0]),&temp,(*C.uchar)(&message[0]),C.ulonglong(len(message)),(*C.uchar)(&secret_key.val[0])) !=0 {
+	if C.crypto_sign_detached((*C.uchar)(&sig[0]),&temp,(*C.uchar)(&message[0]),C.ulonglong(len(message)),(*C.uchar)(&secret_key.Val[0])) !=0 {
 		panic(" sign detached not working")
 	}
 	return sig
@@ -500,11 +500,11 @@ func Sign_detached(message []byte,secret_key SecretKey) ([] byte) {
 
 func Verify_attached(signed_message []byte,public_key Point) (bool) {
 	msg_len := len(signed_message) - 64
-	return C.crypto_sign_verify_detached((*C.uchar)(&signed_message[msg_len]),(*C.uchar)(&signed_message[0]),C.ulonglong(msg_len),(*C.uchar)(&public_key.val[0])) == 0
+	return C.crypto_sign_verify_detached((*C.uchar)(&signed_message[msg_len]),(*C.uchar)(&signed_message[0]),C.ulonglong(msg_len),(*C.uchar)(&public_key.Val[0])) == 0
 }
 
 func Verify_detached(message []byte,signature []byte,public_key Point) (bool) { // IMPLEMENT
-	return C.crypto_sign_verify_detached((*C.uchar)(&signature[0]),(*C.uchar)(&message[0]),C.ulonglong(len(message)),(*C.uchar)(&public_key.val[0])) == 0
+	return C.crypto_sign_verify_detached((*C.uchar)(&signature[0]),(*C.uchar)(&message[0]),C.ulonglong(len(message)),(*C.uchar)(&public_key.Val[0])) == 0
 }
 
 // Testing functionality (will be removed later)
@@ -515,10 +515,10 @@ func Verify_detached(message []byte,signature []byte,public_key Point) (bool) { 
 // 	u, _ = u.SetString("15112221349535400772501151409588531511454012693041857206046113283949847762202",10)
 // 	d, _ = d.SetString("46316835694926478169428394003475163141307993866256225615783033603165251855960",10)
 // 	pt:= New_point(*u,*d)
-// 	fmt.Println(pt.val)
+// 	fmt.Println(pt.Val)
 // 	fmt.Println(pt.Sign())
 // 	pt2:=Raw_point()
-// 	copy(pt2.val,pt.val)
+// 	copy(pt2.Val,pt.Val)
 // 	sum:=pt.Add(pt2)
 // 	fmt.Println(sum)
 // 	diff:= sum.Sub(pt2)
@@ -526,8 +526,8 @@ func Verify_detached(message []byte,signature []byte,public_key Point) (bool) { 
 // 	two:= big.NewInt(2)
 // 	Scalar_2:= New_scalar(*two)
 // 	fmt.Println(pt.Mul(Scalar_2))
-// 	fmt.Println(Random().val)
-// 	// fmt.Println(C.crypto_core_ed25519_Is_valid_point((*C.uchar)(&pt.val[0])))
+// 	fmt.Println(Random().Val)
+// 	// fmt.Println(C.crypto_core_ed25519_Is_valid_point((*C.uchar)(&pt.Val[0])))
 // 	fmt.Println(pt.Is_valid())
 // 	s := New_scalar(*big.NewInt(2))
 // 	// e := New_scalar(*big.NewInt(3))
@@ -535,8 +535,8 @@ func Verify_detached(message []byte,signature []byte,public_key Point) (bool) { 
 // 	fmt.Println(t.Mul(s))
 // 	token := make([]byte,32)
 
-// 	// fmt.Println(C.crypto_scalarmult_ed25519_base_noclamp((*C.uchar)(&token[0]),(*C.uchar)(&s.val[0])))
-// 	C.crypto_scalarmult_ed25519_noclamp((*C.uchar)(&token[0]),(*C.uchar)(&s.val[0]),(*C.uchar)(&pt.val[0]));
+// 	// fmt.Println(C.crypto_scalarmult_ed25519_base_noclamp((*C.uchar)(&token[0]),(*C.uchar)(&s.Val[0])))
+// 	C.crypto_scalarmult_ed25519_noclamp((*C.uchar)(&token[0]),(*C.uchar)(&s.Val[0]),(*C.uchar)(&pt.Val[0]));
 // 	fmt.Println(token)
 // 	fmt.Println(C.crypto_core_ed25519_is_valid_point((*C.uchar)(&token[0])))
     
