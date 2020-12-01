@@ -144,6 +144,8 @@ var (
 		utils.GoerliFlag,
 		utils.VMEnableDebugFlag,
 		utils.NetworkIdFlag,
+		utils.NodeIndexFlag,
+		utils.LocalFlag,
 		utils.EthStatsURLFlag,
 		utils.FakePoWFlag,
 		utils.NoCompactionFlag,

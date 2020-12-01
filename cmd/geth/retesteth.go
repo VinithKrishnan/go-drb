@@ -197,6 +197,10 @@ type NoRewardEngine struct {
 	rewardsOn bool
 }
 
+func (sb *NoRewardEngine) InitKeys(chain consensus.ChainReader) error {
+	return nil
+}
+
 func (sb *NoRewardEngine) Protocol() consensus.Protocol {
 	return consensus.NorewardsProtocol
 }

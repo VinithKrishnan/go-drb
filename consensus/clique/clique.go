@@ -206,6 +206,11 @@ func New(config *params.CliqueConfig, db ethdb.Database) *Clique {
 	}
 }
 
+// InitKeys for Clique
+func (c *Clique) InitKeys(chain consensus.ChainReader) error {
+	return nil
+}
+
 // Author implements consensus.Engine, returning the Ethereum address recovered
 // from the signature in the header's extra-data section.
 func (c *Clique) Author(header *types.Header) (common.Address, error) {

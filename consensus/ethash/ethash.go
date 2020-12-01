@@ -584,6 +584,11 @@ func (ethash *Ethash) Close() error {
 	return err
 }
 
+// InitKeys for Ethash
+func (ethash *Ethash) InitKeys(chain consensus.ChainReader) error {
+	return nil
+}
+
 // cache tries to retrieve a verification cache for the specified block number
 // by first checking against a list of in-memory caches, then against caches
 // stored on disk, and finally generating one if none can be found.

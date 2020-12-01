@@ -44,6 +44,8 @@ var DefaultConfig = Config{
 		DatasetsInMem:  1,
 		DatasetsOnDisk: 2,
 	},
+	NodeIndex:          0,
+	Local:              true,
 	NetworkId:          1337,
 	LightPeers:         100,
 	UltraLightFraction: 75,
@@ -93,6 +95,10 @@ type Config struct {
 	// The genesis block, which is inserted if the database is empty.
 	// If nil, the Ethereum main net block is used.
 	Genesis *core.Genesis `toml:",omitempty"`
+
+	// drb-expt options
+	NodeIndex int
+	Local     bool
 
 	// Protocol options
 	NetworkId uint64 // Network ID to use for selecting peers to connect to

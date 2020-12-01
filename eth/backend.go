@@ -100,6 +100,10 @@ type Ethereum struct {
 	networkID     uint64
 	netRPCService *ethapi.PublicNetAPI
 
+	// drb-expt
+	index int
+	local bool
+
 	lock sync.RWMutex // Protects the variadic fields (e.g. gas price and etherbase)
 }
 
@@ -166,9 +170,11 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 		chainDb:        chainDb,
 		eventMux:       ctx.EventMux,
 		accountManager: ctx.AccountManager,
-		engine:         CreateConsensusEngine(ctx, chainConfig, config, config.Miner.Notify, config.Miner.Noverify, chainDb),
+		engine:         CreateConsensusEngine(ctx, chainConfig, config, config.Miner.Notify, config.Miner.Noverify, chainDb, config.NodeIndex, config.Local),
 		shutdownChan:   make(chan bool),
 		networkID:      config.NetworkId,
+		index:          config.NodeIndex,
+		local:          config.Local,
 		gasPrice:       config.Miner.GasPrice,
 		etherbase:      config.Miner.Etherbase,
 		bloomRequests:  make(chan chan *bloombits.Retrieval),
@@ -261,6 +267,11 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 		}
 	}
 
+	// Initializing the set of key
+	if err := eth.engine.InitKeys(eth.blockchain); err != nil {
+		return nil, err
+	}
+
 	return eth, nil
 }
 
@@ -282,7 +293,7 @@ func makeExtraData(extra []byte, isQuorum bool) []byte {
 }
 
 // CreateConsensusEngine creates the required type of consensus engine instance for an Ethereum service
-func CreateConsensusEngine(ctx *node.ServiceContext, chainConfig *params.ChainConfig, config *Config, notify []string, noverify bool, db ethdb.Database) consensus.Engine {
+func CreateConsensusEngine(ctx *node.ServiceContext, chainConfig *params.ChainConfig, config *Config, notify []string, noverify bool, db ethdb.Database, index int, local bool) consensus.Engine {
 	// If proof-of-authority is requested, set it up
 	if chainConfig.Clique != nil {
 		chainConfig.Clique.AllowedFutureBlockTime = config.Miner.AllowedFutureBlockTime //Quorum
@@ -297,7 +308,7 @@ func CreateConsensusEngine(ctx *node.ServiceContext, chainConfig *params.ChainCo
 		config.Istanbul.Ceil2Nby3Block = chainConfig.Istanbul.Ceil2Nby3Block
 		config.Istanbul.AllowedFutureBlockTime = config.Miner.AllowedFutureBlockTime //Quorum
 
-		return istanbulBackend.New(&config.Istanbul, ctx.NodeKey(), db)
+		return istanbulBackend.New(&config.Istanbul, ctx.NodeKey(), db, index, local)
 	}
 
 	// Otherwise assume proof-of-work

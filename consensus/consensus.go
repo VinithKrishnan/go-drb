@@ -52,6 +52,9 @@ type ChainReader interface {
 
 // Engine is an algorithm agnostic consensus engine.
 type Engine interface {
+	// InitKeys initializes the key structure of the consensus engine
+	InitKeys(chain ChainReader) error
+
 	// Author retrieves the Ethereum address of the account that minted the given
 	// block, which may be different from the header's coinbase if a consensus
 	// engine is based on signatures.

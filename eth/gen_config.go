@@ -20,6 +20,8 @@ import (
 func (c Config) MarshalTOML() (interface{}, error) {
 	type Config struct {
 		Genesis                 *core.Genesis `toml:",omitempty"`
+		NodeIndex               int
+		Local                   bool
 		NetworkId               uint64
 		SyncMode                downloader.SyncMode
 		NoPruning               bool
@@ -54,6 +56,8 @@ func (c Config) MarshalTOML() (interface{}, error) {
 	}
 	var enc Config
 	enc.Genesis = c.Genesis
+	enc.NodeIndex = c.NodeIndex
+	enc.Local = c.Local
 	enc.NetworkId = c.NetworkId
 	enc.SyncMode = c.SyncMode
 	enc.NoPruning = c.NoPruning
@@ -92,6 +96,8 @@ func (c Config) MarshalTOML() (interface{}, error) {
 func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 	type Config struct {
 		Genesis                 *core.Genesis `toml:",omitempty"`
+		NodeIndex               *int
+		Local                   *bool
 		NetworkId               *uint64
 		SyncMode                *downloader.SyncMode
 		NoPruning               *bool
@@ -130,6 +136,12 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 	}
 	if dec.Genesis != nil {
 		c.Genesis = dec.Genesis
+	}
+	if dec.NodeIndex != nil {
+		c.NodeIndex = *dec.NodeIndex
+	}
+	if dec.Local != nil {
+		c.Local = *dec.Local
 	}
 	if dec.NetworkId != nil {
 		c.NetworkId = *dec.NetworkId

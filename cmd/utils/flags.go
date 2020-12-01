@@ -165,6 +165,15 @@ var (
 		Usage: "Network identifier (integer, 1=Frontier, 2=Morden (disused), 3=Ropsten, 4=Rinkeby)",
 		Value: eth.DefaultConfig.NetworkId,
 	}
+	NodeIndexFlag = cli.IntFlag{
+		Name:  "nodeindex",
+		Usage: "Index of the node in the network",
+		Value: eth.DefaultConfig.NodeIndex,
+	}
+	LocalFlag = cli.BoolFlag{
+		Name:  "local",
+		Usage: "Indicates whether the experiment is local or not",
+	}
 	TestnetFlag = cli.BoolFlag{
 		Name:  "testnet",
 		Usage: "Ropsten network: pre-configured proof-of-work test network",
@@ -1639,6 +1648,12 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 	if ctx.GlobalIsSet(NetworkIdFlag.Name) {
 		cfg.NetworkId = ctx.GlobalUint64(NetworkIdFlag.Name)
 	}
+	if ctx.GlobalIsSet(NodeIndexFlag.Name) {
+		cfg.NodeIndex = ctx.GlobalInt(NodeIndexFlag.Name)
+	}
+	if ctx.GlobalIsSet(LocalFlag.Name) {
+		cfg.Local = ctx.GlobalBool(LocalFlag.Name)
+	}
 	if ctx.GlobalIsSet(CacheFlag.Name) || ctx.GlobalIsSet(CacheDatabaseFlag.Name) {
 		cfg.DatabaseCache = ctx.GlobalInt(CacheFlag.Name) * ctx.GlobalInt(CacheDatabaseFlag.Name) / 100
 	}
@@ -2015,7 +2030,7 @@ func MakeChain(ctx *cli.Context, stack *node.Node, useExist bool) (chain *core.B
 		}
 		istanbulConfig.ProposerPolicy = istanbul.ProposerPolicy(config.Istanbul.ProposerPolicy)
 		istanbulConfig.Ceil2Nby3Block = config.Istanbul.Ceil2Nby3Block
-		engine = istanbulBackend.New(istanbulConfig, stack.GetNodeKey(), chainDb)
+		engine = istanbulBackend.New(istanbulConfig, stack.GetNodeKey(), chainDb, 0, false)
 	} else if config.IsQuorum {
 		// for Raft
 		engine = ethash.NewFullFaker()
