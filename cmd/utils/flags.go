@@ -170,6 +170,11 @@ var (
 		Usage: "Index of the node in the network",
 		Value: eth.DefaultConfig.NodeIndex,
 	}
+	StartSeqFlag = cli.Uint64Flag{
+		Name:  "startseq",
+		Usage: "starating position of drb",
+		Value: eth.DefaultConfig.StartSeq,
+	}
 	LocalFlag = cli.BoolFlag{
 		Name:  "local",
 		Usage: "Indicates whether the experiment is local or not",
@@ -1650,6 +1655,9 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 	}
 	if ctx.GlobalIsSet(NodeIndexFlag.Name) {
 		cfg.NodeIndex = ctx.GlobalInt(NodeIndexFlag.Name)
+	}
+	if ctx.GlobalIsSet(StartSeqFlag.Name) {
+		cfg.StartSeq = ctx.GlobalUint64(StartSeqFlag.Name)
 	}
 	if ctx.GlobalIsSet(LocalFlag.Name) {
 		cfg.Local = ctx.GlobalBool(LocalFlag.Name)

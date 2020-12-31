@@ -145,6 +145,7 @@ var (
 		utils.VMEnableDebugFlag,
 		utils.NetworkIdFlag,
 		utils.NodeIndexFlag,
+		utils.StartSeqFlag,
 		utils.LocalFlag,
 		utils.EthStatsURLFlag,
 		utils.FakePoWFlag,

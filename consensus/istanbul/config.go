@@ -32,6 +32,7 @@ type Config struct {
 	Epoch                  uint64         `toml:",omitempty"` // The number of blocks after which to checkpoint and reset the pending votes
 	Ceil2Nby3Block         *big.Int       `toml:",omitempty"` // Number of confirmations required to move from one state to next [2F + 1 to Ceil(2N/3)]
 	AllowedFutureBlockTime uint64         `toml:",omitempty"` // Max time (in seconds) from current time allowed for blocks, before they're considered future blocks
+	StartSeq               uint64
 	NodeIndex              int
 	Local                  bool
 }
@@ -43,6 +44,7 @@ var DefaultConfig = &Config{
 	Epoch:                  30000,
 	Ceil2Nby3Block:         big.NewInt(0),
 	AllowedFutureBlockTime: 0,
+	StartSeq:               10,
 	NodeIndex:              0,
 	Local:                  false,
 }

@@ -44,6 +44,7 @@ var DefaultConfig = Config{
 		DatasetsInMem:  1,
 		DatasetsOnDisk: 2,
 	},
+	StartSeq:           10,
 	NodeIndex:          0,
 	Local:              true,
 	NetworkId:          1337,
@@ -97,6 +98,7 @@ type Config struct {
 	Genesis *core.Genesis `toml:",omitempty"`
 
 	// drb-expt options
+	StartSeq  uint64
 	NodeIndex int
 	Local     bool
 
