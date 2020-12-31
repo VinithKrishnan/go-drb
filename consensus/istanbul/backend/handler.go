@@ -67,6 +67,7 @@ func (sb *backend) HandleMsg(addr common.Address, msg p2p.Msg) (bool, error) {
 
 		data, hash, err := sb.decode(msg)
 		if err != nil {
+			log.Error("error in handling istanbulMsg", "err", err, "addr", addr)
 			return true, errDecodeFailed
 		}
 		// Mark peer's message

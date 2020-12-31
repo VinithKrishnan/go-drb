@@ -23,6 +23,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
@@ -33,6 +34,11 @@ type Proposal interface {
 
 	// Hash retrieves the hash of this proposal.
 	Hash() common.Hash
+
+	RBRoot() common.Hash
+	Commitments() crypto.Points
+	EncEvals() crypto.Points
+	UpdateDRB([]byte, crypto.NodeData)
 
 	EncodeRLP(w io.Writer) error
 
@@ -96,6 +102,18 @@ func (v *View) Cmp(y *View) int {
 type Preprepare struct {
 	View     *View
 	Proposal Proposal
+}
+
+// Commitment is sent during the commitment phase
+type Commitment struct {
+	View  *View
+	NData crypto.NodeData
+}
+
+// PrivateData has the data a leader privately sends to a node
+type PrivateData struct {
+	View  *View
+	RData crypto.RoundData
 }
 
 // EncodeRLP serializes b into the Ethereum RLP format.

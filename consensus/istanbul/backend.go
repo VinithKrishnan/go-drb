@@ -38,6 +38,9 @@ type Backend interface {
 	// Broadcast sends a message to all validators (include self)
 	Broadcast(valSet ValidatorSet, payload []byte) error
 
+	// SendToNode sends a message to the recipient with the given address
+	SendToNode(addr common.Address, payload []byte) error
+
 	// Gossip sends a message to all validators (exclude self)
 	Gossip(valSet ValidatorSet, payload []byte) error
 

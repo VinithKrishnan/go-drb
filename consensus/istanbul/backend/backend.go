@@ -100,6 +100,17 @@ type backend struct {
 	knownMessages  *lru.ARCCache // the cache of self messages
 }
 
+// initKeys iniatilizes the keys at every node
+func (sb *backend) InitKeys(chain consensus.ChainReader) error {
+	// Extracting validators from genesis block
+	ist, err := types.ExtractIstanbulExtra(chain.GetHeaderByNumber(0))
+	if err != nil {
+		log.Error("Error in computing addIdMap", "error", err)
+		return err
+	}
+	return sb.core.InitKeys(ist.Validators)
+}
+
 // zekun: HACK
 func (sb *backend) CalcDifficulty(chain consensus.ChainReader, time uint64, parent *types.Header) *big.Int {
 	return new(big.Int)
@@ -113,6 +124,47 @@ func (sb *backend) Address() common.Address {
 // Validators implements istanbul.Backend.Validators
 func (sb *backend) Validators(proposal istanbul.Proposal) istanbul.ValidatorSet {
 	return sb.getValidators(proposal.Number().Uint64(), proposal.Hash())
+}
+
+// SendToNode sends message to the intended peer
+func (sb *backend) SendToNode(addr common.Address, payload []byte) error {
+	hash := istanbul.RLPHash(payload)
+	sb.knownMessages.Add(hash, true)
+
+	// if recepient is itself
+	if sb.Address() == addr {
+		log.Debug("@drb, Sending self commitment", "hash", hash, "rcv", addr)
+		msg := istanbul.MessageEvent{
+			Payload: payload,
+		}
+		go sb.istanbulEventMux.Post(msg)
+		return nil
+	}
+
+	// send to other node
+	targets := make(map[common.Address]bool)
+	targets[addr] = true
+	if sb.broadcaster != nil && len(targets) > 0 {
+		ps := sb.broadcaster.FindPeers(targets)
+		for addr, p := range ps {
+			ms, ok := sb.recentMessages.Get(addr)
+			var m *lru.ARCCache
+			if ok {
+				m, _ = ms.(*lru.ARCCache)
+				if _, k := m.Get(hash); k {
+					// This peer had this event, skip it
+					continue
+				}
+			} else {
+				m, _ = lru.NewARC(inmemoryMessages)
+			}
+
+			m.Add(hash, true)
+			sb.recentMessages.Add(addr, m)
+			go p.Send(istanbulMsg, payload)
+		}
+	}
+	return nil
 }
 
 // Broadcast implements istanbul.Backend.Broadcast

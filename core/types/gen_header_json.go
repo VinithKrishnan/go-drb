@@ -9,6 +9,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/crypto"
 )
 
 var _ = (*headerMarshaling)(nil)
@@ -29,6 +30,10 @@ func (h Header) MarshalJSON() ([]byte, error) {
 		GasUsed     hexutil.Uint64 `json:"gasUsed"          gencodec:"required"`
 		Time        hexutil.Uint64 `json:"timestamp"        gencodec:"required"`
 		Extra       hexutil.Bytes  `json:"extraData"        gencodec:"required"`
+		RBRoot      common.Hash    `json:"rbHash" 			gencodec:"required"`
+		IndexSet    hexutil.Bytes  `json:"indexSet"         gencodec:"required"`
+		Commitments crypto.Points  `json:"commitments"      gencodec:"required"`
+		EncEvals    crypto.Points  `json:"encEvals"      gencodec:"required"`
 		MixDigest   common.Hash    `json:"mixHash"`
 		Nonce       BlockNonce     `json:"nonce"`
 		Hash        common.Hash    `json:"hash"`
@@ -47,6 +52,10 @@ func (h Header) MarshalJSON() ([]byte, error) {
 	enc.GasUsed = hexutil.Uint64(h.GasUsed)
 	enc.Time = hexutil.Uint64(h.Time)
 	enc.Extra = h.Extra
+	enc.RBRoot = h.RBRoot
+	enc.IndexSet = h.IndexSet
+	enc.Commitments = h.Commitments
+	enc.EncEvals = h.EncEvals
 	enc.MixDigest = h.MixDigest
 	enc.Nonce = h.Nonce
 	enc.Hash = h.Hash()
@@ -69,6 +78,10 @@ func (h *Header) UnmarshalJSON(input []byte) error {
 		GasUsed     *hexutil.Uint64 `json:"gasUsed"          gencodec:"required"`
 		Time        *hexutil.Uint64 `json:"timestamp"        gencodec:"required"`
 		Extra       *hexutil.Bytes  `json:"extraData"        gencodec:"required"`
+		RBRoot      *common.Hash    `json:"rbRoot" 			 gencodec:"required"`
+		IndexSet    *hexutil.Bytes  `json:"indexSet"         gencodec:"required"`
+		Commitments *crypto.Points  `json:"commitments"      gencodec:"required"`
+		EncEvals    *crypto.Points  `json:"encEvals"      gencodec:"required"`
 		MixDigest   *common.Hash    `json:"mixHash"`
 		Nonce       *BlockNonce     `json:"nonce"`
 	}
@@ -128,6 +141,22 @@ func (h *Header) UnmarshalJSON(input []byte) error {
 		return errors.New("missing required field 'extraData' for Header")
 	}
 	h.Extra = *dec.Extra
+	if dec.RBRoot == nil {
+		return errors.New("missing required field 'rbRoot' for Header")
+	}
+	h.RBRoot = *dec.RBRoot
+	if dec.IndexSet == nil {
+		return errors.New("missing required field 'indexSet' for Header")
+	}
+	h.IndexSet = *dec.IndexSet
+	if dec.Commitments == nil {
+		return errors.New("missing required field 'commitments' for Header")
+	}
+	h.Commitments = *dec.Commitments
+	if dec.EncEvals == nil {
+		return errors.New("missing required field 'ciphertexts' for Header")
+	}
+	h.EncEvals = *dec.EncEvals
 	if dec.MixDigest != nil {
 		h.MixDigest = *dec.MixDigest
 	}

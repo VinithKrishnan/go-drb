@@ -1,8 +1,9 @@
 package types
 
 import (
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto/ed25519"
+	"math/big"
+	"strings"
 )
 
 // StringKey is a secret key in the string format
@@ -17,52 +18,43 @@ type Key struct {
 	Skey ed25519.Scalar
 }
 
-// StringToKey converts a string to ed25519.Point
-// TODO, @sourav implement this function
+// StringToKey converts a StringKey to public-private key parii
 func StringToKey(strKey StringKey) Key {
+	xy := strings.Split(strKey.Pkey, ":")
+	xbint, _ := new(big.Int).SetString(xy[0], 10)
+	ybint, _ := new(big.Int).SetString(xy[1], 10)
+	sbint, _ := new(big.Int).SetString(strKey.Skey, 10)
 	return Key{
-		Pkey: ed25519.RawPoint(),
-		Skey: ed25519.RawScalar(),
+		Pkey: ed25519.NewPoint(*xbint, *ybint),
+		Skey: ed25519.NewScalar(*sbint),
 	}
 }
 
 // StringToPoint converts a string to ed25519.Point
-// TODO, @sourav implement this function
 func StringToPoint(str string) ed25519.Point {
-	return ed25519.RawPoint()
+	// split string and then
+	xy := strings.Split(str, ":")
+	xbint, _ := new(big.Int).SetString(xy[0], 10)
+	ybint, _ := new(big.Int).SetString(xy[1], 10)
+	return ed25519.NewPoint(*xbint, *ybint)
 }
 
-// PolyCommit implements the polynomial commitment type
-type PolyCommit struct {
-	Round  int
-	Root   common.Hash
-	Sender common.Address
-	Points ed25519.Points
-}
+// public_key(string format) = x:y // first line of key_i.txt in edkeys folder
+// var xbint, _ = new(big.Int).SetString(x,10)
+// var ybint, _ = new(big.Int).SetString(y,10)
+// public_key(Point format)= NewPoint(xbtin.ybint)
+// secret_key(string format) = s // second line of key_i.txt in edkeys folder. Also ,every line in pubkey.txt.
+// var sbint, _ = new(big.Int).SetString(s,10)
+// secret_key(Scalar format) = NewScalar(sbint)
 
-// EncEval are encryptions of evaluation points
-type EncEval struct {
-	Round  int
-	Root   common.Hash
-	Sender common.Address
-	Encs   ed25519.Points
-}
-
-// RoundData stores data received from the leader
-type RoundData struct {
-	Root     common.Hash
-	IndexSet map[int]bool
-	Commits  map[int]ed25519.Point
-	EncEvals map[int]ed25519.Point
-	Proofs   map[int]NizkProof
-}
-
-// NizkProof is a zk-knowledege of dleq
-type NizkProof struct {
-	Commit   ed25519.Point
-	Chal     ed25519.Scalar
-	Response ed25519.Scalar
-}
-
-// NizkProofs array of proofs
-type NizkProofs []NizkProof
+// NewNodeData creates a new node data
+// func NewNodeData(round uint64, addr common.Address) crypto.NodeData {
+// 	return NodeData{
+// 		Round:    round,
+// 		Root:     common.Hash{},
+// 		Sender:   addr,
+// 		Points:   make(crypto.Points),
+// 		EncEvals: make(crypto.Points),
+// 		Proofs:   make(crypto.NizkProofs),
+// 	}
+// }

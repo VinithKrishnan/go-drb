@@ -29,6 +29,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rlp"
 	"golang.org/x/crypto/sha3"
 )
@@ -82,19 +83,27 @@ type Header struct {
 	GasUsed     uint64         `json:"gasUsed"          gencodec:"required"`
 	Time        uint64         `json:"timestamp"        gencodec:"required"`
 	Extra       []byte         `json:"extraData"        gencodec:"required"`
+	RBRoot      common.Hash    `json: "rbHash" 		 gencodec:"required"`
+	IndexSet    []byte         `json:"indexSet"         gencodec:"required"`
+	Commitments crypto.Points  `json:"commitments"      gencodec:"required"`
+	EncEvals    crypto.Points  `json:"encEvals"      gencodec:"required"`
 	MixDigest   common.Hash    `json:"mixHash"`
 	Nonce       BlockNonce     `json:"nonce"`
 }
 
 // field type overrides for gencodec
 type headerMarshaling struct {
-	Difficulty *hexutil.Big
-	Number     *hexutil.Big
-	GasLimit   hexutil.Uint64
-	GasUsed    hexutil.Uint64
-	Time       hexutil.Uint64
-	Extra      hexutil.Bytes
-	Hash       common.Hash `json:"hash"` // adds call to Hash() in MarshalJSON
+	Difficulty  *hexutil.Big
+	Number      *hexutil.Big
+	GasLimit    hexutil.Uint64
+	GasUsed     hexutil.Uint64
+	Time        hexutil.Uint64
+	Extra       hexutil.Bytes
+	RBHash      common.Hash
+	IndexSet    hexutil.Bytes
+	Commitments crypto.Points
+	EncEvals    crypto.Points
+	Hash        common.Hash `json:"hash"` // adds call to Hash() in MarshalJSON
 }
 
 // Hash returns the block hash of the header, which is simply the keccak256 hash of its
@@ -331,10 +340,23 @@ func (b *Block) ReceiptHash() common.Hash { return b.header.ReceiptHash }
 func (b *Block) UncleHash() common.Hash   { return b.header.UncleHash }
 func (b *Block) Extra() []byte            { return common.CopyBytes(b.header.Extra) }
 
+func (b *Block) RBRoot() common.Hash        { return b.header.RBRoot }
+func (b *Block) IndexSet() []byte           { return common.CopyBytes(b.header.IndexSet) }
+func (b *Block) Commitments() crypto.Points { return b.header.Commitments }
+func (b *Block) EncEvals() crypto.Points    { return b.header.EncEvals }
+
 func (b *Block) Header() *Header { return CopyHeader(b.header) }
 
 // Body returns the non-header content of the block.
 func (b *Block) Body() *Body { return &Body{b.transactions, b.uncles} }
+
+// UpdateDRB updates DRB fields of the block
+func (b *Block) UpdateDRB(isets []byte, cdata crypto.NodeData) {
+	b.header.IndexSet = isets
+	b.header.Commitments = cdata.Points
+	b.header.EncEvals = cdata.EncEvals
+	b.header.RBRoot = cdata.Root
+}
 
 // Size returns the true RLP encoded storage size of the block, either by encoding
 // and returning it, or returning a previsouly cached value.

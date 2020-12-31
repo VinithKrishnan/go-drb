@@ -144,10 +144,8 @@ func (c *core) handleMsg(payload []byte) error {
 	// Only accept message if the address is valid
 	_, src := c.valSet.GetByAddress(msg.Address)
 	if src == nil {
-		logger.Error("Invalid address in message", "msg", msg)
 		return istanbul.ErrUnauthorizedAddress
 	}
-
 	return c.handleCheckedMsg(msg, src)
 }
 
@@ -164,12 +162,18 @@ func (c *core) handleCheckedMsg(msg *message, src istanbul.Validator) error {
 	}
 
 	switch msg.Code {
+	case msgCommitment:
+		return testBacklog(c.handleCommitment(msg, src))
 	case msgPreprepare:
 		return testBacklog(c.handlePreprepare(msg, src))
+	case msgPrivateData:
+		return testBacklog(c.handlePrivateData(msg, src))
 	case msgPrepare:
 		return testBacklog(c.handlePrepare(msg, src))
 	case msgCommit:
 		return testBacklog(c.handleCommit(msg, src))
+	case msgReconstruct:
+		return testBacklog(c.handleReconstruct(msg, src))
 	case msgRoundChange:
 		return testBacklog(c.handleRoundChange(msg, src))
 	default:

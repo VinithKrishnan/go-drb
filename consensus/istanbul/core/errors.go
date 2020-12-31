@@ -37,6 +37,20 @@ var (
 	errInvalidMessage = errors.New("invalid message")
 	// errFailedDecodePreprepare is returned when the PRE-PREPARE message is malformed.
 	errFailedDecodePreprepare = errors.New("failed to decode PRE-PREPARE")
+	// errFailedDecodeAggregate is returned when the AGGREGATE message is malformed.
+	errFailedDecodeAggregate = errors.New("failed to decode AGGREGATE")
+	// errInvalidAggregate is returned when the AGGREGATE message is malformed
+	errInvalidAggregate = errors.New("invalid AGGREGATE")
+	// errInvalidCommitment is returned when invalid commitment is sent to the leader
+	errInvalidCommitment = errors.New("invalid COMMITMENT ")
+	// errFailedDecodeCommitment is returned when the AGGREGATE message is malformed.
+	errFailedDecodeCommitment  = errors.New("failed to decode COMMITMENT")
+	errFailedDecodePrivateData = errors.New("failed to decode PRIVATE DATA")
+
+	// dummy errors to avoid propagation of commitment messages
+	errHandleCommmitment = errors.New("Sucessdully handled commitment")
+	errHandlePrivData    = errors.New("Sucessdully handled private data")
+
 	// errFailedDecodePrepare is returned when the PREPARE message is malformed.
 	errFailedDecodePrepare = errors.New("failed to decode PREPARE")
 	// errFailedDecodeCommit is returned when the COMMIT message is malformed.

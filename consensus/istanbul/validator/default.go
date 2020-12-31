@@ -117,6 +117,11 @@ func (valSet *defaultSet) CalcProposer(lastProposer common.Address, round uint64
 	valSet.proposer = valSet.selector(valSet, lastProposer, round)
 }
 
+// TODO: Double check whether this is needed or not!
+func (valSet *defaultSet) GetProposerByRound(round uint64) common.Address {
+	return valSet.selector(valSet, common.Address{}, round).Address()
+}
+
 func calcSeed(valSet istanbul.ValidatorSet, proposer common.Address, round uint64) uint64 {
 	offset := 0
 	if idx, val := valSet.GetByAddress(proposer); val != nil {

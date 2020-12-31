@@ -20,12 +20,15 @@ import (
 	"bytes"
 	"math"
 	"math/big"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/istanbul"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/crypto/ed25519"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/log"
 	metrics "github.com/ethereum/go-ethereum/metrics"
@@ -50,6 +53,19 @@ func New(backend istanbul.Backend, config *istanbul.Config) Engine {
 		roundMeter:         metrics.NewMeter(),
 		sequenceMeter:      metrics.NewMeter(),
 		consensusTimer:     metrics.NewTimer(),
+		index:              config.NodeIndex,
+		local:              config.Local,
+		startSeq:           5,
+		commitmentCh:       make(chan *istanbul.View),
+		privDataCh:         make(chan *istanbul.View),
+		pubKeys:            make(map[common.Address]ed25519.Point),
+		addrIDMap:          make(map[common.Address]int),
+		idAddrMap:          make(map[int]common.Address),
+		indexSets:          make(map[uint64][]common.Address),
+		leaderData:         make(map[uint64]map[common.Address]crypto.NodeData),
+		leaderAggData:      make(map[uint64]crypto.NodeData),
+		nodeAggData:        make(map[uint64]crypto.NodeData),
+		nodePrivData:       make(map[uint64]crypto.RoundData),
 	}
 
 	r.Register("consensus/istanbul/core/round", c.roundMeter)
@@ -67,6 +83,34 @@ type core struct {
 	address common.Address
 	state   State
 	logger  log.Logger
+
+	// drb misc
+	index int
+	local bool
+
+	// drb
+	numNodes     int
+	threshold    int
+	startSeq     uint64
+	commitmentCh chan *istanbul.View // channel to indicate enough commitment
+	privDataCh   chan *istanbul.View // channel to indicate that aggregate data has been received
+
+	// drb data
+	edKey     types.Key // secret key of the node
+	pubKeys   map[common.Address]ed25519.Point
+	addrIDMap map[common.Address]int
+	idAddrMap map[int]common.Address
+
+	// For leader of a round
+	leaderMu      sync.RWMutex
+	indexSets     map[uint64][]common.Address                   // stores aggregated index
+	leaderData    map[uint64]map[common.Address]crypto.NodeData // round:{addr:NodeData}
+	leaderAggData map[uint64]crypto.NodeData                    // to store the aggregated value at a leader
+
+	// for other nodes
+	nodeMu       sync.RWMutex
+	nodeAggData  map[uint64]crypto.NodeData  // round: [agg. poly. commit; agg. enc]
+	nodePrivData map[uint64]crypto.RoundData // round: node's private data for aggregated commitment
 
 	backend               istanbul.Backend
 	events                *event.TypeMuxSubscription
@@ -97,6 +141,52 @@ type core struct {
 	sequenceMeter metrics.Meter
 	// the timer to record consensus duration (from accepting a preprepare to final committed stage)
 	consensusTimer metrics.Timer
+}
+
+func (c *core) InitKeys(vals []common.Address) error {
+	// Initializing the public keys
+	pkPath := "pubkey.json"
+	keyPath := "edkeys/k" + strconv.Itoa(c.index) + ".json"
+
+	// initializing number of nodes an threshold
+	c.setNumNodesTh(len(vals))
+
+	// Load the nodes from the config file.
+	var nodelist []string
+	if err := common.LoadJSON(pkPath, &nodelist); err != nil {
+		log.Error("Can't load node file", "path", pkPath, "error", err)
+		return err
+	}
+	for i, val := range vals {
+		c.addrIDMap[val] = i
+		c.idAddrMap[i] = val
+		c.pubKeys[val] = types.StringToPoint(nodelist[i])
+		log.Trace("Initializing pkeys", "addr", val, "idx", i, "pkey", nodelist[i])
+	}
+
+	// loads the key into the key of the user
+	var strKey types.StringKey
+	if err := common.LoadJSON(keyPath, &strKey); err != nil {
+		log.Error("Can't load node file", "path", keyPath, "error", err)
+		return err
+	}
+	c.edKey = types.StringToKey(strKey)
+	log.Debug("Initializing local key", "addr", c.address, "pkey", strKey.Pkey)
+	return nil
+}
+
+// getIndex returns the index of the user
+func (c *core) getIndex(addr common.Address) int {
+	if idx, ok := c.addrIDMap[addr]; ok {
+		return idx
+	}
+	return -1
+}
+
+// setNumNodesTh sets the total and threshold
+func (c *core) setNumNodesTh(total int) {
+	c.numNodes = total
+	c.threshold = (total-1)/3 + 1
 }
 
 func (c *core) finalizeMessage(msg *message) ([]byte, error) {
@@ -146,6 +236,22 @@ func (c *core) broadcast(msg *message) {
 	// Broadcast payload
 	if err = c.backend.Broadcast(c.valSet, payload); err != nil {
 		logger.Error("Failed to broadcast message", "msg", msg, "err", err)
+		return
+	}
+}
+
+// sendToNode sends a given message to the intended receipient
+func (c *core) sendToNode(addr common.Address, msg *message) {
+	logger := c.logger.New("state", c.state)
+
+	payload, err := c.finalizeMessage(msg)
+	if err != nil {
+		logger.Error("Failed to finalize message", "msg", msg, "err", err)
+		return
+	}
+	// Send payload
+	if err = c.backend.SendToNode(addr, payload); err != nil {
+		logger.Error("Failed to send message", "rcv", addr, "msg", msg, "err", err)
 		return
 	}
 }
@@ -256,14 +362,27 @@ func (c *core) startNewRound(round *big.Int) {
 			r := &istanbul.Request{
 				Proposal: c.current.Proposal(), //c.current.Proposal would be the locked proposal by previous proposer, see updateRoundState
 			}
-			c.sendPreprepare(r)
+			go c.sendPreprepare(r)
 		} else if c.current.pendingRequest != nil {
-			c.sendPreprepare(c.current.pendingRequest)
+			go c.sendPreprepare(c.current.pendingRequest)
 		}
 	}
 	c.newRoundChangeTimer()
 
 	logger.Debug("New round", "new_round", newView.Round, "new_seq", newView.Sequence, "new_proposer", c.valSet.GetProposer(), "valSet", c.valSet.List(), "size", c.valSet.Size(), "IsProposer", c.IsProposer())
+}
+
+// getPubKeys returns publicKyes in the form of a array
+func (c *core) getPubKeys() crypto.Points {
+	var (
+		pubKeys = make(crypto.Points, c.numNodes)
+		index   int
+	)
+	for addr, key := range c.pubKeys {
+		index = c.addrIDMap[addr]
+		pubKeys[index] = key
+	}
+	return pubKeys
 }
 
 func (c *core) catchUpRound(view *istanbul.View) {

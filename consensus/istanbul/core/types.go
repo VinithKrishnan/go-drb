@@ -29,6 +29,7 @@ type Engine interface {
 	Start() error
 	Stop() error
 
+	InitKeys([]common.Address) error
 	IsProposer() bool
 
 	// verify if a hash is the same as the proposed block in the current pending request
@@ -82,6 +83,9 @@ const (
 	msgPrepare
 	msgCommit
 	msgRoundChange
+	msgCommitment
+	msgPrivateData
+	msgReconstruct
 	// msgAll
 )
 
