@@ -66,6 +66,8 @@ func New(backend istanbul.Backend, config *istanbul.Config) Engine {
 		leaderAggData:      make(map[uint64]crypto.NodeData),
 		nodeAggData:        make(map[uint64]crypto.NodeData),
 		nodePrivData:       make(map[uint64]crypto.RoundData),
+		nodeRecData:        make(map[uint64]map[uint64]ed25519.Point),
+		beacon:             make(map[uint64]ed25519.Point),
 	}
 
 	r.Register("consensus/istanbul/core/round", c.roundMeter)
@@ -104,13 +106,15 @@ type core struct {
 	// For leader of a round
 	leaderMu      sync.RWMutex
 	indexSets     map[uint64][]common.Address                   // stores aggregated index
-	leaderData    map[uint64]map[common.Address]crypto.NodeData // round:{addr:NodeData}
+	leaderData    map[uint64]map[common.Address]crypto.NodeData // height:{addr:NodeData}
 	leaderAggData map[uint64]crypto.NodeData                    // to store the aggregated value at a leader
 
 	// for other nodes
 	nodeMu       sync.RWMutex
-	nodeAggData  map[uint64]crypto.NodeData  // round: [agg. poly. commit; agg. enc]
-	nodePrivData map[uint64]crypto.RoundData // round: node's private data for aggregated commitment
+	nodeAggData  map[uint64]crypto.NodeData          // height: [agg. poly. commit; agg. enc]
+	nodePrivData map[uint64]crypto.RoundData         // height: node's private data for aggregated commitment
+	nodeRecData  map[uint64]map[uint64]ed25519.Point // height: {index:share}
+	beacon       map[uint64]ed25519.Point            // height: beacon-output
 
 	backend               istanbul.Backend
 	events                *event.TypeMuxSubscription
@@ -275,7 +279,7 @@ func (c *core) IsCurrentProposal(blockHash common.Hash) bool {
 	return c.current != nil && c.current.pendingRequest != nil && c.current.pendingRequest.Proposal.Hash() == blockHash
 }
 
-func (c *core) commit() {
+func (c *core) commit(view *istanbul.View) {
 	c.setState(StateCommitted)
 
 	proposal := c.current.Proposal()
@@ -285,11 +289,13 @@ func (c *core) commit() {
 			committedSeals[i] = make([]byte, types.IstanbulExtraSeal)
 			copy(committedSeals[i][:], v.CommittedSeal[:])
 		}
-
 		if err := c.backend.Commit(proposal, committedSeals); err != nil {
 			c.current.UnlockHash() //Unlock block when insertion fails
 			c.sendNextRoundChange()
 			return
+		}
+		if view.Sequence.Uint64() > c.startSeq {
+			go c.sendReconstruct(view)
 		}
 	}
 }

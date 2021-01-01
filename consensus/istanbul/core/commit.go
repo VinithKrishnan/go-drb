@@ -80,7 +80,7 @@ func (c *core) handleCommit(msg *message, src istanbul.Validator) error {
 
 		// Still need to call LockHash here since state can skip Prepared state and jump directly to the Committed state.
 		c.current.LockHash()
-		c.commit()
+		c.commit(commit.View)
 	}
 
 	return nil

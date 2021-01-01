@@ -47,6 +47,13 @@ type NizkProof struct {
 	Response ed25519.Scalar
 }
 
+// RecData is the reconstruction message of a node
+type RecData struct {
+	Index    uint64
+	DecShare ed25519.Point
+	Proof    NizkProof
+}
+
 type NizkProofs []NizkProof
 type Points []ed25519.Point
 type Scalars []ed25519.Scalar
@@ -141,6 +148,21 @@ func ShareRandomSecret(rcvPublicKeys Points, total, ths int, secret ed25519.Scal
 	}
 }
 
+// ReconstructData returns the data for the reconstruction phase
+func ReconstructData(commit, enc, pkey ed25519.Point, skey ed25519.Scalar) RecData {
+	dec := DecryptShare(enc, skey)
+	chal, res := DleqProve(H, dec, pkey, enc, skey)
+	return RecData{
+		DecShare: dec,
+		Proof: NizkProof{
+			Commit:   pkey,
+			EncEval:  enc,
+			Chal:     chal,
+			Response: res,
+		},
+	}
+}
+
 // DecryptShare encryptedshare * secret_key.inverse()
 func DecryptShare(share ed25519.Point, secretKey ed25519.Scalar) ed25519.Point {
 	return share.Mul(secretKey.Inverse())
@@ -182,10 +204,6 @@ func DleqVerify(numProofs int, proofs NizkProofs, h Points) bool {
 	for i := 0; i < numProofs; i++ {
 		// each proof contains (Commit, EncEval, Chal, Response)
 		proof := proofs[i]
-		// x := proof.Commit
-		// y := proof.EncEval
-		// e := proof.Chal
-		// z := proof.Response
 		a1 := G.Mul(proof.Response).Add(proof.Commit.Mul(proof.Chal))
 		a2 := h[i].Mul(proof.Response).Add(proof.EncEval.Mul(proof.Chal))
 		eLocal := DleqDeriveChal(proof.Commit, proof.EncEval, a1, a2)
@@ -283,7 +301,6 @@ func DleqDeriveChal(x ed25519.Point, y ed25519.Point, a1 ed25519.Point, a2 ed255
 
 // ProveShareCorrectnessBatch uses a batched challenge
 func ProveShareCorrectnessBatch(shares Scalars, commits, encEvals Points, pubKeys Points) NizkProofs {
-	// return ShareCorrectnessProof{[]ed25519.Point{ed25519.RawPoint()},ed25519.RawScalar(),Scalars{ed25519.RawScalar()}}
 	n := len(shares)
 	if n != len(commits) || n != len(pubKeys) || n != len(encEvals) {
 		panic("Lengths not equal!")
@@ -482,6 +499,12 @@ func ValidateCommit(aggr bool, com NodeData, pubKeys Points, total, ths int) err
 	return nil
 }
 
+// ValidateReconstruct whether a received reconstruction message is valid or not
+// TODO: write this function.
+func ValidateReconstruct(pubKey, share ed25519.Point, proof NizkProof) error {
+	return nil
+}
+
 // ValidateRoundData validates private messages received from leader
 func ValidateRoundData(rData RoundData, root common.Hash) bool {
 	// check for correct formation of the MerkleRoot
@@ -502,31 +525,10 @@ func ValidateRoundData(rData RoundData, root common.Hash) bool {
 // 1. Obtain v_0 via Langrange interpolation from v_1, ..., v_t, or from any other t-sized subset of {v_1, ..., v_n}.
 // This is possible as the commitments v_1, ... v_n are all public information after the secret has been shared.
 //  2. Use the fact v_0 = g^p(0) = g^s to verify that the given secret s is valid.
-func VerifySecret(secret ed25519.Scalar, commitments []ed25519.Point, recovery_threshold int) bool {
-	v0 := Recover(commitments, recovery_threshold)
+func VerifySecret(secret ed25519.Scalar, commitments []ed25519.Point, threshold int) bool {
+	v0 := Recover(commitments, threshold)
 	return v0.Equal(G.Mul(secret))
 }
-
-type ShareDecryptionProof struct {
-	challenge ed25519.Scalar
-	response  Scalars
-}
-
-// ProveShareDecryption proves that decrypted_share is a valid decryption for the given public key.
-// i.e. implements DLEQ(h, pk_i, s~_i, ŝ_i)
-func ProveShareDecryption(decrypted_share ed25519.Point, encrypted_share ed25519.Point, secret_key ed25519.Scalar, public_key ed25519.Point) ShareDecryptionProof {
-	challenge, response := DleqBatchProve([]ed25519.Point{H}, []ed25519.Point{decrypted_share}, []ed25519.Point{public_key}, []ed25519.Point{encrypted_share}, Scalars{secret_key})
-
-	return ShareDecryptionProof{challenge, response}
-}
-
-// VerifyDecryptedShare checks that the given share does indeed correspond to the given encrypted share.
-// Returns True if the share is valid.
-// func VerifyDecryptedShare(decrypted_share ed25519.Point, encrypted_share ed25519.Point, public_key ed25519.Point, proof ShareDecryptionProof) bool {
-// 	challenge, response := proof.challenge, proof.response
-// 	return DleqVerify([]ed25519.Point{H}, []ed25519.Point{decrypted_share}, []ed25519.Point{public_key}, []ed25519.Point{encrypted_share}, challenge, response)
-
-// }
 
 // Recover takes EXACTLY t (idx, share) tuples and performs Langrange interpolation to recover the secret S.
 // The validity of the decrypted shares has to be verified prior to a call of this function.
@@ -540,8 +542,31 @@ func Recover(shares Points, threshold int) ed25519.Point {
 
 	rec := ed25519.B // initialing it, will be subtracted later
 	for idx := 0; idx < threshold; idx++ {
-		t := LagrangeCoeffecient(ed25519.NewScalar(*big.NewInt(int64(idx + 1))), idxs)
+		t := LagrangeCoeffecientScalar(ed25519.NewScalar(*big.NewInt(int64(idx + 1))), idxs)
 		a := shares[idx].Mul(t)
+		rec = rec.Add(a)
+	}
+	return rec.Sub(ed25519.B)
+}
+
+// RecoverBeacon computes the beacon output
+// TODO: Optimize this!
+func RecoverBeacon(shares map[uint64]ed25519.Point, threshold int) ed25519.Point {
+	// initializing indeces
+	idxs := make(Scalars, threshold)
+	i := 0
+	for idx := range shares {
+		idxs[i] = ed25519.NewScalar(*new(big.Int).SetUint64(idx))
+		i++
+	}
+
+	// Interpolating the beacon output
+	rec := ed25519.B
+	for idx, point := range shares {
+		sIdx := ed25519.NewScalar(*new(big.Int).SetUint64(idx))
+		t := LagrangeCoeffecientScalar(sIdx, idxs)
+		log.Info("after LC", "t", t, "point", point)
+		a := point.Mul(t)
 		rec = rec.Add(a)
 	}
 	return rec.Sub(ed25519.B)
@@ -565,8 +590,21 @@ func RandomCodeword(numNodes int, threshold int) Scalars {
 	return codeword
 }
 
-// LagrangeCoeffecient compute lagrange coefficints
-func LagrangeCoeffecient(i ed25519.Scalar, indices Scalars) ed25519.Scalar {
+// // LagrangeCoeffecient compute lagrange coefficints
+// func LagrangeCoeffecient(i uint64, indices []uint64) ed25519.Scalar {
+// 	numerator := *big.NewInt(1)
+// 	denominator := *big.NewInt(1)
+// 	for j := 0; j < len(indices); j++ {
+// 		if indices[j] != i {
+// 			numerator = numerator.Mul(big.NewInt(indices[j]))
+// 			denominator = denominator.Mul(*big.NewInt(indices[j]).Sub(*big.NewInt(i)))
+// 		}
+// 	}
+// 	return ed25519.NewScalar(numerator.Div(denominator))
+// }
+
+// LagrangeCoeffecientScalar compute lagrange coefficints
+func LagrangeCoeffecientScalar(i ed25519.Scalar, indices Scalars) ed25519.Scalar {
 	numerator := ed25519.NewScalar(*big.NewInt(1))
 	denominator := ed25519.NewScalar(*big.NewInt(1))
 	for j := 0; j < len(indices); j++ {

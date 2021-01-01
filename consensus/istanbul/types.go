@@ -104,6 +104,12 @@ type Preprepare struct {
 	Proposal Proposal
 }
 
+// Reconstruct for the reconstruction phase
+type Reconstruct struct {
+	View    *View
+	RecData crypto.RecData
+}
+
 // Commitment is sent during the commitment phase
 type Commitment struct {
 	View  *View

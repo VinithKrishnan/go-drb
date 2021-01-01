@@ -201,10 +201,6 @@ func (c *core) handleCommitment(msg *message, src istanbul.Validator) error {
 	}
 
 	comm := cmsg.NData
-	if c.valSet.GetProposer().Address() != c.address {
-		return errNotFromProposer
-	}
-
 	if err := crypto.ValidateCommit(false, comm, c.getPubKeys(), c.numNodes, c.threshold); err != nil {
 		log.Error("Invalid commitment", "from", src.Address(), "index", index, "number", comm.Round, "err", err)
 		return errInvalidCommitment
@@ -217,7 +213,7 @@ func (c *core) handleCommitment(msg *message, src istanbul.Validator) error {
 		}
 		log.Debug("Aggregated commitment", "number", comm.Round)
 	}
-	return errHandleCommmitment
+	return errHandleCommitment
 }
 
 // addCommitment add commitments
@@ -324,7 +320,7 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 		return errFailedDecodePreprepare
 	}
 
-	round := preprepare.View.Round.Uint64()
+	round := preprepare.View.Sequence.Uint64()
 	if round > c.startSeq {
 		// Create a NodeData using the Preprepare message
 		aData = crypto.NodeData{

@@ -17,31 +17,81 @@
 package core
 
 import (
-	"github.com/ethereum/go-ethereum/common"
+	"encoding/hex"
+
 	"github.com/ethereum/go-ethereum/consensus/istanbul"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/crypto/ed25519"
 	"github.com/ethereum/go-ethereum/log"
 )
 
-/**
-* 1. Fetch the message based on round number.
-* 2. Aggregate the shares.
-* 3. Generate proof.
-* 4. broadcast it to everyone
-**/
-func (c *core) sendReconstruct(view *istanbul.View, digest common.Hash) {
-	c.broadcast(&message{
-		Code: msgReconstruct,
-	})
+// sendReconstruct sends a reconstruction message for a particular view
+func (c *core) sendReconstruct(view *istanbul.View) {
+	logger := c.logger.New("state", c.state)
+	seq := view.Sequence.Uint64()
+	if aData, ok := c.nodeAggData[seq]; ok {
+		index := c.addrIDMap[c.Address()]
+		aCommit := aData.Points[index]
+		encEval := aData.EncEvals[index] // aggregated encrypted data
+		recData := crypto.ReconstructData(aCommit, encEval, c.edKey.Pkey, c.edKey.Skey)
+		recData.Index = uint64(index)
+
+		reconstruct, err := Encode(&istanbul.Reconstruct{
+			View:    view,
+			RecData: recData,
+		})
+		if err != nil {
+			logger.Error("Failed to encode reconstruction message", "view", view)
+			return
+		}
+		c.broadcast(&message{
+			Code: msgReconstruct,
+			Msg:  reconstruct,
+		})
+		logger.Debug("@drb, Broadcast recontstuction message", "number", seq, "index", index)
+	}
 }
 
-/**
-* 1. Check if already validated based on index
-* 2. Validate
-* 3. Upon succesful validation, add to the list
-* 4. If more than t+1 valid shares, reconstruct!
-**/
+// handleReconstruct reconstructs given enough share has been received
 func (c *core) handleReconstruct(msg *message, src istanbul.Validator) error {
 	index := c.getIndex(src.Address())
-	log.Info("@drb ", "addr", src.Address(), "index", index)
-	return nil
+	log.Debug("Handling reconstruction message from", "addr", src.Address(), "index", index)
+
+	var rmsg *istanbul.Reconstruct
+	err := msg.Decode(&rmsg)
+	if err != nil {
+		log.Error("Reconstruct decoding failed", "from", src.Address(), "index", "err", err)
+		return errFailedDecodeReconstruct
+	}
+
+	rSeq := rmsg.View.Sequence.Uint64()
+	// Beacon output already available, no need to process further
+	if _, rok := c.beacon[rSeq]; rok {
+		return errHandleReconstruct
+	}
+
+	recon := rmsg.RecData
+	rIndex := recon.Index
+	rPkey := c.pubKeys[src.Address()]
+	if err := crypto.ValidateReconstruct(rPkey, recon.DecShare, recon.Proof); err != nil {
+		log.Error("Invalid reconstruct message", "from", src.Address(), "index", "err", err)
+		return errInvalidReconstruct
+	}
+	c.addReconstruct(rSeq, rIndex, recon.DecShare)
+	return errHandleReconstruct
+}
+
+// addReconstruct adds a reconstruction message
+func (c *core) addReconstruct(seq, index uint64, share ed25519.Point) {
+	if _, ok := c.nodeRecData[seq]; !ok {
+		c.nodeRecData[seq] = make(map[uint64]ed25519.Point)
+	}
+	c.nodeRecData[seq][index] = share
+	log.Debug("Added share for", "number", seq, "share", hex.EncodeToString(share.Val), "from", index)
+
+	if len(c.nodeRecData[seq]) == c.threshold {
+		output := crypto.RecoverBeacon(c.nodeRecData[seq], c.threshold)
+		c.beacon[seq] = output
+		log.Info("Beacon output for", "number", seq, "output", hex.EncodeToString(output.Val))
+	}
 }
