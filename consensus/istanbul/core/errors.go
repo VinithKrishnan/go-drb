@@ -44,6 +44,7 @@ var (
 	// errInvalidCommitment is returned when invalid commitment is sent to the leader
 	errInvalidCommitment  = errors.New("invalid COMMITMENT ")
 	errInvalidReconstruct = errors.New("invalid  RECONSTRUCTION MSG")
+	errAggDataNotFound    = errors.New("Aggregate data not found")
 
 	// errFailedDecodeCommitment is returned when the AGGREGATE message is malformed.
 	errFailedDecodeCommitment  = errors.New("failed to decode COMMITMENT")

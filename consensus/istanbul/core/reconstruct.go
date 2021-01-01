@@ -69,12 +69,20 @@ func (c *core) handleReconstruct(msg *message, src istanbul.Validator) error {
 	if _, rok := c.beacon[rSeq]; rok {
 		return errHandleReconstruct
 	}
+	// check whether aggregate data is available or not
+	aData, aok := c.nodeAggData[rSeq]
+	if !aok {
+		log.Error("Aggregate data not found", "number", rSeq)
+		return errAggDataNotFound
+	}
 
 	recon := rmsg.RecData
 	rIndex := recon.Index
 	rPkey := c.pubKeys[src.Address()]
-	if err := crypto.ValidateReconstruct(rPkey, recon.DecShare, recon.Proof); err != nil {
-		log.Error("Invalid reconstruct message", "from", src.Address(), "index", "err", err)
+	encShare := aData.EncEvals[rIndex]
+
+	if !crypto.ValidateReconstruct(rPkey, encShare, recon.DecShare, recon.Proof) {
+		log.Error("Invalid reconstruct message", "from", src.Address(), "index", rIndex)
 		return errInvalidReconstruct
 	}
 	c.addReconstruct(rSeq, rIndex, recon.DecShare)

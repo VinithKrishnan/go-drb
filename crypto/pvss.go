@@ -500,9 +500,15 @@ func ValidateCommit(aggr bool, com NodeData, pubKeys Points, total, ths int) err
 }
 
 // ValidateReconstruct whether a received reconstruction message is valid or not
-// TODO: write this function.
-func ValidateReconstruct(pubKey, share ed25519.Point, proof NizkProof) error {
-	return nil
+func ValidateReconstruct(pkey, encshare, share ed25519.Point, proof NizkProof) bool {
+	// Using values from the output of the SMR
+	a1 := H.Mul(proof.Response).Add(pkey.Mul(proof.Chal))
+	a2 := share.Mul(proof.Response).Add(encshare.Mul(proof.Chal))
+	eLocal := DleqDeriveChal(pkey, encshare, a1, a2)
+	if !reflect.DeepEqual(proof.Chal, eLocal) {
+		return false
+	}
+	return true
 }
 
 // ValidateRoundData validates private messages received from leader

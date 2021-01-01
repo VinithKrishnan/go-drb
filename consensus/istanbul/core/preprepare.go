@@ -267,7 +267,7 @@ func (c *core) aggregate(round uint64) {
 
 // handleAggregate initiates the procedure to handle aggregated message
 func (c *core) handleAggregate(sender common.Address, aData crypto.NodeData) error {
-	logger := c.logger.New("state", c.state)
+	logger := c.logger.New()
 	if c.valSet.GetProposer().Address() != sender {
 		return errNotFromProposer
 	}
@@ -281,7 +281,7 @@ func (c *core) handleAggregate(sender common.Address, aData crypto.NodeData) err
 		c.nodeAggData[aData.Round] = aData
 	}
 
-	logger.Info("Handled Aggregate", "addr", sender, "round", aData.Round, "root", aData.Root)
+	logger.Info("Handled Aggregate", "number", aData.Round, "root", aData.Root)
 	return nil
 }
 
@@ -415,13 +415,13 @@ func (c *core) handlePreprepareAsync(preprepare *istanbul.Preprepare, round uint
 	// Wait till the node recieves private data from the leader
 	if _, ok := c.nodePrivData[round]; !ok {
 		done := false
-		log.Info("Waiting for private data from leader!")
+		log.Debug("Waiting for private data from leader!")
 		for {
 			select {
 			// TODO: We can change this to a bool value indicating
 			// whether the leader sent correct data or not.
 			case view := <-c.privDataCh:
-				log.Info("Received private data!", "around", round, "vround", view.Sequence.Uint64())
+				log.Debug("Received private data!", "around", round, "vround", view.Sequence.Uint64())
 				if view.Sequence.Uint64() == round {
 					done = true
 				}
