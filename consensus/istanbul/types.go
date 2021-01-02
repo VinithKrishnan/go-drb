@@ -112,7 +112,6 @@ type Reconstruct struct {
 
 // Commitment is sent during the commitment phase
 type Commitment struct {
-	View  *View
 	NData crypto.NodeData
 }
 

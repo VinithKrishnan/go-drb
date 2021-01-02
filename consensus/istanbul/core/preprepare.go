@@ -32,46 +32,42 @@ func (c *core) sendPreprepare(request *istanbul.Request) {
 	// If I'm the proposer and I have the same sequence with the proposal
 	if c.current.Sequence().Cmp(request.Proposal.Number()) == 0 {
 		// sending polynomial commitment to the leader
-		curView := c.currentView()
-		// round := curView.Round.Uint64()
 		seq := c.current.Sequence().Uint64()
-		if seq > c.startSeq {
-			c.sendCommitment(curView, seq)
+		if seq > c.startSeq-c.forwardSeq {
+			c.sendCommitment(c.forwardSeq)
 		}
 		if c.IsProposer() {
+			curView := c.currentView()
 			// checking whether the node already has the required data or not
 			if seq > c.startSeq {
 				c.leaderMu.RLock()
-				cData, ok := c.leaderAggData[seq]
-				aisets, _ := c.indexSets[seq]
+				cok := len(c.penRoots) > 0
 				c.leaderMu.RUnlock()
-				bisets := c.getByteIndexSets(aisets)
-				log.Debug("Waiting for commitments", "sequenc", seq, "ldeader", c.Address())
 
 				done := false
-				if !ok {
+				if !cok {
+					log.Debug("Waiting for commitments", "sequenc", seq, "ldeader", c.Address())
 					for {
 						select {
-						// TODO(sourav): We can change this to a bool value indicating
-						// whether the leader sent correct data or not.
-						case view := <-c.commitmentCh:
-							if view.Sequence.Uint64() == seq {
-								c.leaderMu.RLock()
-								cData = c.leaderAggData[seq]
-								aisets = c.indexSets[seq]
-								c.leaderMu.RUnlock()
-								bisets = c.getByteIndexSets(aisets)
+						// TODO(sourav): double check for its correctness
+						case <-c.commitmentCh:
+							c.leaderMu.RLock()
+							if len(c.penRoots) > 0 {
 								done = true
 							}
+							c.leaderMu.RUnlock()
 						}
 						if done {
 							break
 						}
 					}
 				}
-				// to update the blockheader with aggregated commitment
+				root := c.penRoots[0]
+				cData := c.penAggData[root]
+				bisets := c.getByteIndexSets(c.penIndexSets[root])
 				request.Proposal.UpdateDRB(bisets, cData)
-				go c.sendPrivateData(curView, cData.Root)
+				c.penRoots = c.penRoots[1:] // deleting pending root
+				go c.sendPrivateData(curView, root)
 			}
 
 			preprepare, err := Encode(&istanbul.Preprepare{
@@ -110,37 +106,8 @@ func (c *core) getIntIndexSets(aisets []common.Address) []int {
 
 // sendPrivateData sends private appropriate private data to each node!
 func (c *core) sendPrivateData(view *istanbul.View, root common.Hash) {
-	var (
-		round      = view.Sequence.Uint64()
-		indexSets  = c.indexSets[round]
-		leaderData = c.leaderData[round]
-		// intISets   = c.getIntIndexSets(indexSets)
-	)
-	// For each recipient form a round data message and send it
-	// TODO(sourav): Optimize this!
-	for rcvAddr, rcvIndex := range c.addrIDMap {
-		var (
-			commits  crypto.Points
-			encEvals crypto.Points
-			proofs   crypto.NizkProofs
-		)
-
-		for _, addr := range indexSets {
-			nData := leaderData[addr]
-			commits = append(commits, nData.Points[rcvIndex])
-			encEvals = append(encEvals, nData.EncEvals[rcvIndex])
-			proofs = append(proofs, nData.Proofs[rcvIndex])
-		}
-
-		rData := crypto.RoundData{
-			Round:    round,
-			Root:     root,
-			IndexSet: indexSets,
-			Commits:  commits,
-			EncEvals: encEvals,
-			Proofs:   proofs,
-		}
-		go c.sendPrivateDataNode(view, rcvAddr, rData)
+	for raddr, rData := range c.penPrivData[root] {
+		go c.sendPrivateDataNode(view, raddr, rData)
 	}
 }
 
@@ -162,20 +129,19 @@ func (c *core) sendPrivateDataNode(view *istanbul.View, rcvAddr common.Address, 
 }
 
 // sendCommitment sends the commitment to the leader of the round
-func (c *core) sendCommitment(view *istanbul.View, seq uint64) {
+func (c *core) sendCommitment(fwd uint64) {
 	logger := c.logger.New("state", c.state)
-	leader := c.valSet.GetProposer().Address()
+	_, lastProposer := c.backend.LastProposal()
+	leader := c.valSet.GetFutProposer(lastProposer, fwd, c.current.Round().Uint64())
 	nData := crypto.ShareRandomSecret(c.getPubKeys(), c.numNodes, c.threshold, ed25519.Random())
 	nData.Sender = c.address
-	nData.Round = seq
 
 	// creating a commitment using a nData
 	commitment, err := Encode(&istanbul.Commitment{
-		View:  view,
 		NData: nData,
 	})
 	if err != nil {
-		logger.Error("Failed to encode commitment", "view", view)
+		logger.Error("Failed to encode commitment", "fwd", fwd)
 		return
 	}
 	// send commitment to leader
@@ -184,7 +150,7 @@ func (c *core) sendCommitment(view *istanbul.View, seq uint64) {
 		Code: msgCommitment,
 		Msg:  commitment,
 	})
-	log.Info("Sending commitment", "number", seq, "leader", leader, "self", self)
+	log.Debug("Sending commitment", "leader", leader, "self", self)
 }
 
 // handleCommitment validates a received commitment and stores in a local
@@ -208,10 +174,9 @@ func (c *core) handleCommitment(msg *message, src istanbul.Validator) error {
 	// Notifying send preprepare thread to propose
 	if aggregated := c.addCommitment(comm, src.Address()); aggregated {
 		select {
-		case c.commitmentCh <- cmsg.View:
+		case c.commitmentCh <- struct{}{}:
 		default:
 		}
-		log.Debug("Aggregated commitment", "number", comm.Round)
 	}
 	return errHandleCommitment
 }
@@ -222,52 +187,91 @@ func (c *core) addCommitment(com crypto.NodeData, sender common.Address) bool {
 	// c.leaderMu.Lock()
 	// defer c.leaderMu.Unlock()
 
-	seq := com.Round
-	if _, ok := c.leaderData[seq]; !ok {
-		c.leaderData[seq] = make(map[common.Address]crypto.NodeData)
-		c.indexSets[seq] = []common.Address{}
-	}
-	if _, ok := c.leaderData[seq][sender]; !ok {
-		c.leaderData[seq][sender] = com
-		indexCount := len(c.indexSets[seq])
-		if indexCount < c.threshold {
-			c.indexSets[seq] = append(c.indexSets[seq], sender)
-			indexCount = indexCount + 1
-			log.Debug("Adding commitment", "number", com.Round, "count", indexCount, "from", sender)
-
-			// If received enough votes for the current seq
-			if indexCount == c.threshold && c.current.Sequence().Uint64() == seq {
-				c.aggregate(seq)
-				return true
-			}
+	fidx := -1
+	pLen := 0
+	for idx, pendings := range c.penData {
+		pLen++
+		if _, ok := pendings[sender]; !ok {
+			pendings[sender] = com
+			fidx = idx
+			break
 		}
+	}
+
+	if fidx == -1 {
+		fidx = pLen
+		c.penData = append(c.penData, map[common.Address]crypto.NodeData{})
+		c.penData[fidx][sender] = com
+		// Returning false as we know that only one element is present in pending
+		if c.threshold > 1 {
+			return false
+		}
+	}
+
+	if len(c.penData[fidx]) == c.threshold {
+		c.aggregate(fidx)
+		c.penData = append(c.penData[:fidx], c.penData[fidx+1:]...) // deleting from pending
+		return true
 	}
 	return false
 }
 
 // aggregate aggregates t+1 polynomial into a single commitment
-func (c *core) aggregate(round uint64) {
+func (c *core) aggregate(idx int) {
 	// This function assumes that leaderMu is alreagy locked
 	var (
-		indexSets []int
-		data      []crypto.NodeData
+		isets  = make([]int, c.threshold)
+		aisets = make([]common.Address, c.threshold)
+		data   = make([]crypto.NodeData, c.threshold)
 	)
 	// prepare input for the aggregate functions
-	dataMap := c.leaderData[round]
-	for _, addr := range c.indexSets[round] {
-		indexSets = append(indexSets, c.addrIDMap[addr])
-		data = append(data, dataMap[addr])
+	pendings := c.penData[idx]
+	i := 0
+	for addr, nData := range pendings {
+		isets[i] = c.addrIDMap[addr]
+		aisets[i] = addr
+		data[i] = nData
+		i++
 	}
 
 	// invoke crypto AggregateCommit function
-	aggData := crypto.AggregateCommit(c.numNodes, indexSets, data)
-	aggData.Round = round // update round information
-	c.leaderAggData[round] = aggData
+	aggData := crypto.AggregateCommit(c.numNodes, isets, data)
+	root := aggData.Root
+	c.penRoots = append(c.penRoots, root)
+	c.penAggData[root] = aggData
+	c.penIndexSets[root] = aisets
+	c.penPrivData[root] = make(map[common.Address]crypto.RoundData)
+
+	for raddr, ridx := range c.addrIDMap {
+		var (
+			commits  = make(crypto.Points, c.threshold)
+			encEvals = make(crypto.Points, c.threshold)
+			proofs   = make(crypto.NizkProofs, c.threshold)
+		)
+
+		// initializing round data for every node
+		ii := 0
+		for _, nData := range pendings {
+			commits[ii] = nData.Points[ridx]
+			encEvals[ii] = nData.EncEvals[ridx]
+			proofs[ii] = nData.Proofs[ridx]
+			ii++
+		}
+		c.penPrivData[root][raddr] = crypto.RoundData{
+			Root:     root,
+			IndexSet: aisets,
+			Commits:  commits,
+			EncEvals: encEvals,
+			Proofs:   proofs,
+		}
+	}
+	log.Debug("Aggregated commitment for", "root", root)
 }
 
 // handleAggregate initiates the procedure to handle aggregated message
 func (c *core) handleAggregate(sender common.Address, aData crypto.NodeData) error {
-	if c.valSet.GetProposer().Address() != sender {
+	if !c.valSet.IsProposer(sender) {
+		log.Error("Aggregate not from leader", "sender", sender, "leader", c.valSet.GetProposer())
 		return errNotFromProposer
 	}
 
@@ -276,10 +280,7 @@ func (c *core) handleAggregate(sender common.Address, aData crypto.NodeData) err
 	}
 
 	// adding aggregated information to the nodeAggData dictionary
-	if _, ok := c.nodeAggData[aData.Round]; !ok {
-		c.nodeAggData[aData.Round] = aData
-	}
-
+	c.nodeAggData[aData.Round] = aData
 	log.Info("Handled Aggregate", "number", aData.Round, "root", aData.Root)
 	return nil
 }
@@ -289,13 +290,19 @@ func (c *core) handlePrivateData(msg *message, src istanbul.Validator) error {
 	var pData *istanbul.PrivateData
 	err := msg.Decode(&pData)
 	if err != nil {
-		logger.Error("Private data decoding error", "error", err)
+		logger.Error("Private data decoding error", "src", src.Address(), "error", err)
 		return errFailedDecodePrivateData
 	}
-	seq := pData.View.Sequence.Uint64()
-	if _, ok := c.nodePrivData[seq]; !ok {
-		c.nodePrivData[seq] = pData.RData
+
+	if !c.valSet.IsProposer(src.Address()) {
+		logger.Error("Private data not from proposer", "src", src.Address(), "leader", c.valSet.GetProposer())
+		return errNotFromProposer
 	}
+
+	// TODO(sourav): validate private data
+	seq := pData.View.Sequence.Uint64()
+	c.nodePrivData[seq] = pData.RData
+
 	// sending a signal to privDataCh about availability of data
 	select {
 	case c.privDataCh <- pData.View:
@@ -410,8 +417,9 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 }
 
 func (c *core) handlePreprepareAsync(preprepare *istanbul.Preprepare, round uint64) {
-	// TODO(sourav): We may have to add a timer to avoid a deadlock
-	// Wait till the node recieves private data from the leader
+	// TODO(sourav): Check whether the private data sent by the leader corresponds
+	// to the content of the propsal. Important to handle leader failures after
+	// preprepare phase.
 	if _, ok := c.nodePrivData[round]; !ok {
 		done := false
 		log.Debug("Waiting for private data from leader!")

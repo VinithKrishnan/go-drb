@@ -106,6 +106,13 @@ func (valSet *defaultSet) GetProposer() istanbul.Validator {
 	return valSet.proposer
 }
 
+// GetFutProposer returns the address of fwd future proposer
+func (valSet *defaultSet) GetFutProposer(lastProposer common.Address, fwd, round uint64) common.Address {
+	valSet.validatorMu.RLock()
+	defer valSet.validatorMu.RUnlock()
+	return valSet.selector(valSet, lastProposer, fwd+round).Address()
+}
+
 func (valSet *defaultSet) IsProposer(address common.Address) bool {
 	_, val := valSet.GetByAddress(address)
 	return reflect.DeepEqual(valSet.GetProposer(), val)
@@ -115,11 +122,6 @@ func (valSet *defaultSet) CalcProposer(lastProposer common.Address, round uint64
 	valSet.validatorMu.RLock()
 	defer valSet.validatorMu.RUnlock()
 	valSet.proposer = valSet.selector(valSet, lastProposer, round)
-}
-
-// TODO(sourav): Double check whether this is needed or not!
-func (valSet *defaultSet) GetProposerByRound(round uint64) common.Address {
-	return valSet.selector(valSet, common.Address{}, round).Address()
 }
 
 func calcSeed(valSet istanbul.ValidatorSet, proposer common.Address, round uint64) uint64 {

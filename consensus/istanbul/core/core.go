@@ -57,18 +57,18 @@ func New(backend istanbul.Backend, config *istanbul.Config) Engine {
 		forwardSeq:         config.ForwardSeq,
 		index:              config.NodeIndex,
 		local:              config.Local,
-		commitmentCh:       make(chan *istanbul.View),
+		commitmentCh:       make(chan struct{}, 10),
 		privDataCh:         make(chan *istanbul.View),
 		pubKeys:            make(map[common.Address]ed25519.Point),
 		addrIDMap:          make(map[common.Address]int),
 		idAddrMap:          make(map[int]common.Address),
-		indexSets:          make(map[uint64][]common.Address),
-		leaderData:         make(map[uint64]map[common.Address]crypto.NodeData),
-		leaderAggData:      make(map[uint64]crypto.NodeData),
 		nodeAggData:        make(map[uint64]crypto.NodeData),
 		nodePrivData:       make(map[uint64]crypto.RoundData),
 		nodeRecData:        make(map[uint64]map[uint64]ed25519.Point),
 		beacon:             make(map[uint64]ed25519.Point),
+		penAggData:         make(map[common.Hash]crypto.NodeData),
+		penIndexSets:       make(map[common.Hash][]common.Address),
+		penPrivData:        make(map[common.Hash]map[common.Address]crypto.RoundData),
 	}
 
 	r.Register("consensus/istanbul/core/round", c.roundMeter)
@@ -96,7 +96,7 @@ type core struct {
 	threshold    int
 	startSeq     uint64
 	forwardSeq   uint64
-	commitmentCh chan *istanbul.View // channel to indicate enough commitment
+	commitmentCh chan struct{}       // channel to indicate enough commitment
 	privDataCh   chan *istanbul.View // channel to indicate that aggregate data has been received
 
 	// drb data
@@ -106,10 +106,14 @@ type core struct {
 	idAddrMap map[int]common.Address
 
 	// For leader of a round
-	leaderMu      sync.RWMutex
-	indexSets     map[uint64][]common.Address                   // stores aggregated index
-	leaderData    map[uint64]map[common.Address]crypto.NodeData // height:{addr:NodeData}
-	leaderAggData map[uint64]crypto.NodeData                    // to store the aggregated value at a leader
+	leaderMu sync.RWMutex
+
+	// data used in forward commitment
+	penRoots     []common.Hash                        // pending roots
+	penData      []map[common.Address]crypto.NodeData // future usable commitments
+	penAggData   map[common.Hash]crypto.NodeData      // future usable aggregate data
+	penIndexSets map[common.Hash][]common.Address     // index set of pending aggregated data
+	penPrivData  map[common.Hash]map[common.Address]crypto.RoundData
 
 	// for other nodes
 	nodeMu       sync.RWMutex

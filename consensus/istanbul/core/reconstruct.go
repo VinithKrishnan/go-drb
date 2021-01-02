@@ -71,7 +71,6 @@ func (c *core) handleReconstruct(msg *message, src istanbul.Validator) error {
 	// check whether aggregate data is available or not
 	aData, aok := c.nodeAggData[rSeq]
 	if !aok {
-		log.Error("Aggregate data not found", "number", rSeq)
 		return errAggDataNotFound
 	}
 
