@@ -45,6 +45,7 @@ var DefaultConfig = Config{
 		DatasetsOnDisk: 2,
 	},
 	StartSeq:           10,
+	ForwardSeq:         0,
 	NodeIndex:          0,
 	Local:              true,
 	NetworkId:          1337,
@@ -98,9 +99,10 @@ type Config struct {
 	Genesis *core.Genesis `toml:",omitempty"`
 
 	// drb-expt options
-	StartSeq  uint64
-	NodeIndex int
-	Local     bool
+	StartSeq   uint64
+	ForwardSeq uint64
+	NodeIndex  int
+	Local      bool
 
 	// Protocol options
 	NetworkId uint64 // Network ID to use for selecting peers to connect to

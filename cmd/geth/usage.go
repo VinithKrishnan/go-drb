@@ -76,6 +76,7 @@ var AppHelpFlagGroups = []flagGroup{
 			utils.SmartCardDaemonPathFlag,
 			utils.NodeIndexFlag,
 			utils.StartSeqFlag,
+			utils.ForwardSeqFlag,
 			utils.LocalFlag,
 			utils.NetworkIdFlag,
 			utils.TestnetFlag,

@@ -175,6 +175,11 @@ var (
 		Usage: "starating position of drb",
 		Value: eth.DefaultConfig.StartSeq,
 	}
+	ForwardSeqFlag = cli.Uint64Flag{
+		Name:  "forwardseq",
+		Usage: "number of heights in advance nodes sends their commitments",
+		Value: eth.DefaultConfig.ForwardSeq,
+	}
 	LocalFlag = cli.BoolFlag{
 		Name:  "local",
 		Usage: "Indicates whether the experiment is local or not",
@@ -1658,6 +1663,9 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 	}
 	if ctx.GlobalIsSet(StartSeqFlag.Name) {
 		cfg.StartSeq = ctx.GlobalUint64(StartSeqFlag.Name)
+	}
+	if ctx.GlobalIsSet(ForwardSeqFlag.Name) {
+		cfg.ForwardSeq = ctx.GlobalUint64(ForwardSeqFlag.Name)
 	}
 	if ctx.GlobalIsSet(LocalFlag.Name) {
 		cfg.Local = ctx.GlobalBool(LocalFlag.Name)

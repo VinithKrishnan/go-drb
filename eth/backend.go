@@ -101,9 +101,10 @@ type Ethereum struct {
 	netRPCService *ethapi.PublicNetAPI
 
 	// drb-expt
-	startSeq uint64
-	index    int
-	local    bool
+	startSeq   uint64
+	forwardSeq uint64
+	index      int
+	local      bool
 
 	lock sync.RWMutex // Protects the variadic fields (e.g. gas price and etherbase)
 }
@@ -175,6 +176,7 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 		shutdownChan:   make(chan bool),
 		networkID:      config.NetworkId,
 		startSeq:       config.StartSeq,
+		forwardSeq:     config.ForwardSeq,
 		index:          config.NodeIndex,
 		local:          config.Local,
 		gasPrice:       config.Miner.GasPrice,
@@ -310,6 +312,7 @@ func CreateConsensusEngine(ctx *node.ServiceContext, chainConfig *params.ChainCo
 		config.Istanbul.Ceil2Nby3Block = chainConfig.Istanbul.Ceil2Nby3Block
 		config.Istanbul.AllowedFutureBlockTime = config.Miner.AllowedFutureBlockTime //Quorum
 		config.Istanbul.StartSeq = config.StartSeq
+		config.Istanbul.ForwardSeq = config.ForwardSeq
 		config.Istanbul.NodeIndex = config.NodeIndex
 		config.Istanbul.Local = config.Local
 

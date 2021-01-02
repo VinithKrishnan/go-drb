@@ -54,6 +54,7 @@ func New(backend istanbul.Backend, config *istanbul.Config) Engine {
 		sequenceMeter:      metrics.NewMeter(),
 		consensusTimer:     metrics.NewTimer(),
 		startSeq:           config.StartSeq,
+		forwardSeq:         config.ForwardSeq,
 		index:              config.NodeIndex,
 		local:              config.Local,
 		commitmentCh:       make(chan *istanbul.View),
@@ -94,6 +95,7 @@ type core struct {
 	numNodes     int
 	threshold    int
 	startSeq     uint64
+	forwardSeq   uint64
 	commitmentCh chan *istanbul.View // channel to indicate enough commitment
 	privDataCh   chan *istanbul.View // channel to indicate that aggregate data has been received
 

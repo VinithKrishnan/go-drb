@@ -33,6 +33,7 @@ type Config struct {
 	Ceil2Nby3Block         *big.Int       `toml:",omitempty"` // Number of confirmations required to move from one state to next [2F + 1 to Ceil(2N/3)]
 	AllowedFutureBlockTime uint64         `toml:",omitempty"` // Max time (in seconds) from current time allowed for blocks, before they're considered future blocks
 	StartSeq               uint64
+	ForwardSeq             uint64
 	NodeIndex              int
 	Local                  bool
 }
@@ -45,6 +46,7 @@ var DefaultConfig = &Config{
 	Ceil2Nby3Block:         big.NewInt(0),
 	AllowedFutureBlockTime: 0,
 	StartSeq:               10,
+	ForwardSeq:             0,
 	NodeIndex:              0,
 	Local:                  false,
 }

@@ -146,6 +146,7 @@ var (
 		utils.NetworkIdFlag,
 		utils.NodeIndexFlag,
 		utils.StartSeqFlag,
+		utils.ForwardSeqFlag,
 		utils.LocalFlag,
 		utils.EthStatsURLFlag,
 		utils.FakePoWFlag,

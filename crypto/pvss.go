@@ -517,7 +517,7 @@ func Recover(shares Points, threshold int) ed25519.Point {
 
 	rec := ed25519.B // initialing it, will be subtracted later
 	for idx := 0; idx < threshold; idx++ {
-		t := LagrangeCoeffecientScalar(ed25519.NewScalar(*big.NewInt(int64(idx + 1))), idxs)
+		t := LagrangeCoefficientScalar(ed25519.NewScalar(*big.NewInt(int64(idx + 1))), idxs)
 		a := shares[idx].Mul(t)
 		rec = rec.Add(a)
 	}
@@ -539,7 +539,7 @@ func RecoverBeacon(shares map[uint64]ed25519.Point, threshold int) ed25519.Point
 	rec := ed25519.B
 	for idx, point := range shares {
 		sIdx := ed25519.NewScalar(*new(big.Int).SetUint64(idx + 1))
-		t := LagrangeCoeffecientScalar(sIdx, idxs)
+		t := LagrangeCoefficientScalar(sIdx, idxs)
 		a := point.Mul(t)
 		rec = rec.Add(a)
 	}
@@ -564,21 +564,8 @@ func RandomCodeword(numNodes int, threshold int) Scalars {
 	return codeword
 }
 
-// // LagrangeCoeffecient compute lagrange coefficints
-// func LagrangeCoeffecient(i uint64, indices []uint64) ed25519.Scalar {
-// 	numerator := *big.NewInt(1)
-// 	denominator := *big.NewInt(1)
-// 	for j := 0; j < len(indices); j++ {
-// 		if indices[j] != i {
-// 			numerator = numerator.Mul(big.NewInt(indices[j]))
-// 			denominator = denominator.Mul(*big.NewInt(indices[j]).Sub(*big.NewInt(i)))
-// 		}
-// 	}
-// 	return ed25519.NewScalar(numerator.Div(denominator))
-// }
-
-// LagrangeCoeffecientScalar compute lagrange coefficints
-func LagrangeCoeffecientScalar(i ed25519.Scalar, indices Scalars) ed25519.Scalar {
+// LagrangeCoefficientScalar compute lagrange coefficints
+func LagrangeCoefficientScalar(i ed25519.Scalar, indices Scalars) ed25519.Scalar {
 	numerator := ed25519.NewScalar(*big.NewInt(1))
 	denominator := ed25519.NewScalar(*big.NewInt(1))
 	for j := 0; j < len(indices); j++ {
