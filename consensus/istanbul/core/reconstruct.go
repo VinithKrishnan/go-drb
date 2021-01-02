@@ -28,7 +28,10 @@ import (
 // sendReconstruct sends a reconstruction message for a particular view
 func (c *core) sendReconstruct(view *istanbul.View) {
 	seq := view.Sequence.Uint64()
-	if aData, ok := c.nodeAggData[seq]; ok {
+	c.nodeMu.RLock()
+	aData, ok := c.nodeAggData[seq]
+	c.nodeMu.RUnlock()
+	if ok {
 		index := c.addrIDMap[c.Address()]
 		aCommit := aData.Points[index]
 		encEval := aData.EncEvals[index] // aggregated encrypted data
@@ -53,6 +56,8 @@ func (c *core) sendReconstruct(view *istanbul.View) {
 
 // handleReconstruct reconstructs given enough share has been received
 func (c *core) handleReconstruct(msg *message, src istanbul.Validator) error {
+	c.nodeMu.Lock()
+	defer c.nodeMu.Unlock()
 	index := c.getIndex(src.Address())
 	log.Debug("Handling reconstruction message from", "addr", src.Address(), "index", index)
 

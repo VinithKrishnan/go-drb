@@ -105,8 +105,9 @@ type core struct {
 	addrIDMap map[common.Address]int
 	idAddrMap map[int]common.Address
 
-	// For leader of a round
+	// drb locks
 	leaderMu sync.RWMutex
+	nodeMu   sync.RWMutex
 
 	// data used in forward commitment
 	penRoots     []common.Hash                        // pending roots
@@ -116,7 +117,6 @@ type core struct {
 	penPrivData  map[common.Hash]map[common.Address]crypto.RoundData
 
 	// for other nodes
-	nodeMu       sync.RWMutex
 	nodeAggData  map[uint64]crypto.NodeData          // height: [agg. poly. commit; agg. enc]
 	nodePrivData map[uint64]crypto.RoundData         // height: node's private data for aggregated commitment
 	nodeRecData  map[uint64]map[uint64]ed25519.Point // height: {index:share}

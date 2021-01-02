@@ -62,11 +62,13 @@ func (c *core) sendPreprepare(request *istanbul.Request) {
 						}
 					}
 				}
+				c.leaderMu.RLock()
 				root := c.penRoots[0]
 				cData := c.penAggData[root]
 				bisets := c.getByteIndexSets(c.penIndexSets[root])
 				request.Proposal.UpdateDRB(bisets, cData)
 				c.penRoots = c.penRoots[1:] // deleting pending root
+				c.leaderMu.RUnlock()
 				go c.sendPrivateData(curView, root)
 			}
 
@@ -106,6 +108,8 @@ func (c *core) getIntIndexSets(aisets []common.Address) []int {
 
 // sendPrivateData sends private appropriate private data to each node!
 func (c *core) sendPrivateData(view *istanbul.View, root common.Hash) {
+	c.leaderMu.RLock()
+	defer c.leaderMu.RUnlock()
 	for raddr, rData := range c.penPrivData[root] {
 		go c.sendPrivateDataNode(view, raddr, rData)
 	}
@@ -184,8 +188,8 @@ func (c *core) handleCommitment(msg *message, src istanbul.Validator) error {
 // addCommitment add commitments
 func (c *core) addCommitment(com crypto.NodeData, sender common.Address) bool {
 	// Locking state variables of leader
-	// c.leaderMu.Lock()
-	// defer c.leaderMu.Unlock()
+	c.leaderMu.Lock()
+	defer c.leaderMu.Unlock()
 
 	fidx := -1
 	pLen := 0
@@ -279,8 +283,10 @@ func (c *core) handleAggregate(sender common.Address, aData crypto.NodeData) err
 		return err
 	}
 
-	// adding aggregated information to the nodeAggData dictionary
+	// adding aggregated information to the dictionary
+	c.nodeMu.Lock()
 	c.nodeAggData[aData.Round] = aData
+	c.nodeMu.Unlock()
 	log.Info("Handled Aggregate", "number", aData.Round, "root", aData.Root)
 	return nil
 }
@@ -416,11 +422,14 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 	return nil
 }
 
-func (c *core) handlePreprepareAsync(preprepare *istanbul.Preprepare, round uint64) {
+func (c *core) handlePreprepareAsync(preprepare *istanbul.Preprepare, seq uint64) {
 	// TODO(sourav): Check whether the private data sent by the leader corresponds
 	// to the content of the propsal. Important to handle leader failures after
 	// preprepare phase.
-	if _, ok := c.nodePrivData[round]; !ok {
+	c.nodeMu.RLock()
+	_, ok := c.nodePrivData[seq]
+	c.nodeMu.RUnlock()
+	if !ok {
 		done := false
 		log.Debug("Waiting for private data from leader!")
 		for {
@@ -428,8 +437,7 @@ func (c *core) handlePreprepareAsync(preprepare *istanbul.Preprepare, round uint
 			// TODO(sourav): We can change this to a bool value indicating
 			// whether the leader sent correct data or not.
 			case view := <-c.privDataCh:
-				log.Debug("Received private data!", "around", round, "vround", view.Sequence.Uint64())
-				if view.Sequence.Uint64() == round {
+				if view.Sequence.Uint64() == seq {
 					done = true
 				}
 			}
