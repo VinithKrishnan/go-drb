@@ -27,7 +27,6 @@ import (
 
 // sendReconstruct sends a reconstruction message for a particular view
 func (c *core) sendReconstruct(view *istanbul.View) {
-	logger := c.logger.New("state", c.state)
 	seq := view.Sequence.Uint64()
 	if aData, ok := c.nodeAggData[seq]; ok {
 		index := c.addrIDMap[c.Address()]
@@ -41,14 +40,14 @@ func (c *core) sendReconstruct(view *istanbul.View) {
 			RecData: recData,
 		})
 		if err != nil {
-			logger.Error("Failed to encode reconstruction message", "view", view)
+			log.Error("Failed to encode reconstruction message", "view", view)
 			return
 		}
 		c.broadcast(&message{
 			Code: msgReconstruct,
 			Msg:  reconstruct,
 		})
-		logger.Debug("@drb, Broadcast recontstuction message", "number", seq, "index", index)
+		log.Info("Broadcast recontstuction message", "number", seq)
 	}
 }
 

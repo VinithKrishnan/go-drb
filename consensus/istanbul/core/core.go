@@ -361,7 +361,8 @@ func (c *core) startNewRound(round *big.Int) {
 	c.valSet.CalcProposer(lastProposer, newView.Round.Uint64())
 	c.waitingForRoundChange = false
 	c.setState(StateAcceptRequest)
-	if roundChange && c.IsProposer() && c.current != nil {
+	// if roundChange && c.IsProposer() && c.current != nil {
+	if roundChange && c.current != nil {
 		// If it is locked, propose the old proposal
 		// If we have pending request, propose pending request
 		if c.current.IsHashLocked() {

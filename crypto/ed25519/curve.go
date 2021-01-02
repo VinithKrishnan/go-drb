@@ -24,7 +24,7 @@ import (
 
 // libsodium linking code above import C statement
 // type ldconfig if lib sodium is not found
-//TODO: replace assignment of array woth copy of array
+//TODO(sourav): replace assignment of array woth copy of array
 
 const BYTE_ORDER = "little"
 
@@ -34,7 +34,7 @@ var GROUP_ORDER = new(big.Int).Add(new(big.Int).Exp(big.NewInt(2), big.NewInt(25
 
 // Point struct representing a group element, wraps to the underlying implementation in C
 type Point struct {
-	x   big.Int // x coordinate  // TODO: Remove x and y coordiantes
+	x   big.Int // x coordinate  // TODO(sourav): Remove x and y coordiantes
 	y   big.Int // y coordinate
 	Val []byte  // y_packed value in little endian format
 }

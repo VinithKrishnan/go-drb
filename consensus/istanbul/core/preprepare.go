@@ -52,7 +52,7 @@ func (c *core) sendPreprepare(request *istanbul.Request) {
 				if !ok {
 					for {
 						select {
-						// TODO: We can change this to a bool value indicating
+						// TODO(sourav): We can change this to a bool value indicating
 						// whether the leader sent correct data or not.
 						case view := <-c.commitmentCh:
 							if view.Sequence.Uint64() == seq {
@@ -117,7 +117,7 @@ func (c *core) sendPrivateData(view *istanbul.View, root common.Hash) {
 		// intISets   = c.getIntIndexSets(indexSets)
 	)
 	// For each recipient form a round data message and send it
-	// TODO: Optimize this!
+	// TODO(sourav): Optimize this!
 	for rcvAddr, rcvIndex := range c.addrIDMap {
 		var (
 			commits  crypto.Points
@@ -267,7 +267,6 @@ func (c *core) aggregate(round uint64) {
 
 // handleAggregate initiates the procedure to handle aggregated message
 func (c *core) handleAggregate(sender common.Address, aData crypto.NodeData) error {
-	logger := c.logger.New()
 	if c.valSet.GetProposer().Address() != sender {
 		return errNotFromProposer
 	}
@@ -281,7 +280,7 @@ func (c *core) handleAggregate(sender common.Address, aData crypto.NodeData) err
 		c.nodeAggData[aData.Round] = aData
 	}
 
-	logger.Info("Handled Aggregate", "number", aData.Round, "root", aData.Root)
+	log.Info("Handled Aggregate", "number", aData.Round, "root", aData.Root)
 	return nil
 }
 
@@ -411,14 +410,14 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 }
 
 func (c *core) handlePreprepareAsync(preprepare *istanbul.Preprepare, round uint64) {
-	// TODO: We may have to add a timer to avoid a deadlock
+	// TODO(sourav): We may have to add a timer to avoid a deadlock
 	// Wait till the node recieves private data from the leader
 	if _, ok := c.nodePrivData[round]; !ok {
 		done := false
 		log.Debug("Waiting for private data from leader!")
 		for {
 			select {
-			// TODO: We can change this to a bool value indicating
+			// TODO(sourav): We can change this to a bool value indicating
 			// whether the leader sent correct data or not.
 			case view := <-c.privDataCh:
 				log.Debug("Received private data!", "around", round, "vround", view.Sequence.Uint64())

@@ -168,36 +168,6 @@ func DecryptShare(share ed25519.Point, secretKey ed25519.Scalar) ed25519.Point {
 	return share.Mul(secretKey.Inverse())
 }
 
-// Performs a the DLEQ NIZK protocol for the given values g, x, h, y and the exponent α.
-//         I.e. the prover shows that he knows α such that x = g^α and y = h^α holds.
-//         Returns challenge e and z to verifier
-// Should I build function to prove in parallel for same chalenge e
-// func DLEQ_prove(g []ed25519.Point, h []ed25519.Point, x []ed25519.Point, y []ed25519.Point, alpha Scalars) (ed25519.Scalar, Scalars) {
-// 	n := len(g)
-// 	if n != len(x) || n != len(h) || n != len(y) || n != len(alpha) {
-// 		panic("Lenghts are not equal!")
-// 	}
-// 	var w Scalars // w random element  from Zq
-// 	for i := 0; i < n; i++ {
-// 		w = append(w, ed25519.Random())
-// 	}
-// 	var a1 []ed25519.Point // a1 = g^w
-// 	for i := 0; i < n; i++ {
-// 		a1 = append(a1, g[i].Mul(w[i]))
-// 	}
-// 	var a2 []ed25519.Point // a2 = h^w
-// 	for i := 0; i < n; i++ {
-// 		a2 = append(a2, h[i].Mul(w[i]))
-// 	}
-// 	e := DLEQ_derive_challenge(x, y, a1, a2) // the challenge e
-
-// 	var z Scalars // a2 = h^w
-// 	for i := 0; i < n; i++ {
-// 		z = append(z, w[i].Sub(alpha[i].Mul(e)))
-// 	}
-// 	return e, z
-// }
-
 // DleqVerify performs a the verification procedure of DLEQ NIZK protocol for the
 // given values g, x, h, y the (common) challenge e and the response z.
 func DleqVerify(numProofs int, proofs NizkProofs, h Points) bool {
@@ -476,8 +446,8 @@ func aggrMerkleRoot(isets []int, commits, encEvals Points) common.Hash {
 	return common.BytesToHash(bs)
 }
 
-// MerkleRoot of a byte array
-// TODO: Compute Merkle Root of a binary data!
+// MerkleRoot computes the merkle root of a tree
+// TODO(sourav): Implement this function
 func MerkleRoot(data []byte) common.Hash {
 	return common.Hash{}
 }
@@ -511,6 +481,12 @@ func ValidateReconstruct(pkey, encshare, share ed25519.Point, proof NizkProof) b
 	return true
 }
 
+// ValidatePrivData validates the private data sent by the leaer
+// TODO(sourav): implement this function
+func ValidatePrivData(rData RoundData, root common.Hash) error {
+	return nil
+}
+
 // ValidateRoundData validates private messages received from leader
 func ValidateRoundData(rData RoundData, root common.Hash) bool {
 	// check for correct formation of the MerkleRoot
@@ -520,26 +496,19 @@ func ValidateRoundData(rData RoundData, root common.Hash) bool {
 	return true
 }
 
-// """ Checks if a revealed secret indeed corresponding to a provided commitment.
-//         Returns True if the secret is valid.
-//         Returns False is the secret is invalid.
-//         Also returns False if the secret is valid but the commitment
-//         (i.e. the coefficients of the underlying polynomial) where not derive according to the protocol.
-//     """
-
-// VerifySecret does the following
-// 1. Obtain v_0 via Langrange interpolation from v_1, ..., v_t, or from any other t-sized subset of {v_1, ..., v_n}.
-// This is possible as the commitments v_1, ... v_n are all public information after the secret has been shared.
-//  2. Use the fact v_0 = g^p(0) = g^s to verify that the given secret s is valid.
+// VerifySecret does the following:
+// 1. Obtain v_0 via Langrange interpolation from v_1, ..., v_t, or from any
+//  other t-sized subset of {v_1, ..., v_n}. This is possible as the commitments
+// 	v_1, ... v_n are all public information after the secret has been shared.
+// 2. Use the fact v_0 = g^p(0) = g^s to verify that the given secret s is valid.
 func VerifySecret(secret ed25519.Scalar, commitments []ed25519.Point, threshold int) bool {
 	v0 := Recover(commitments, threshold)
 	return v0.Equal(G.Mul(secret))
 }
 
-// Recover takes EXACTLY t (idx, share) tuples and performs Langrange interpolation to recover the secret S.
-// The validity of the decrypted shares has to be verified prior to a call of this function.
-// TODO: Take in indices of shares instead of recovery threshold
-// NOTE: Indices of shares are [1 ... recovery_threshold]
+// Recover takes EXACTLY t (idx, share) tuples and performs Langrange interpolation
+// to recover the secret S. The validity of the decrypted shares has to be verified
+// prior to a call of this function.
 func Recover(shares Points, threshold int) ed25519.Point {
 	var idxs Scalars
 	for i := 1; i <= threshold; i++ {
@@ -556,22 +525,21 @@ func Recover(shares Points, threshold int) ed25519.Point {
 }
 
 // RecoverBeacon computes the beacon output
-// TODO: Optimize this!
+// TODO(sourav): Optimize this!
 func RecoverBeacon(shares map[uint64]ed25519.Point, threshold int) ed25519.Point {
 	// initializing indeces
 	idxs := make(Scalars, threshold)
 	i := 0
 	for idx := range shares {
-		idxs[i] = ed25519.NewScalar(*new(big.Int).SetUint64(idx))
+		idxs[i] = ed25519.NewScalar(*new(big.Int).SetUint64(idx + 1))
 		i++
 	}
 
 	// Interpolating the beacon output
 	rec := ed25519.B
 	for idx, point := range shares {
-		sIdx := ed25519.NewScalar(*new(big.Int).SetUint64(idx))
+		sIdx := ed25519.NewScalar(*new(big.Int).SetUint64(idx + 1))
 		t := LagrangeCoeffecientScalar(sIdx, idxs)
-		log.Info("after LC", "t", t, "point", point)
 		a := point.Mul(t)
 		rec = rec.Add(a)
 	}
