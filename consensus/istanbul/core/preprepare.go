@@ -305,6 +305,15 @@ func (c *core) aggregate(idx int) {
 			Proofs:   proofs,
 		}
 	}
+
+	aggtime := c.logdir + "aggtime"
+	aggtimef, err := os.OpenFile(aggtime, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Error("Can't open aggtime  file", "error", err)
+	}
+	fmt.Fprintln(aggtimef, idx, root.Hex(), c.address.Hex(), c.Now())
+	aggtimef.Close()
+
 	log.Debug("Aggregated commitment for", "root", root)
 }
 
