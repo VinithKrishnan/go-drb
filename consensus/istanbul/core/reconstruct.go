@@ -18,6 +18,8 @@ package core
 
 import (
 	"encoding/hex"
+	"fmt"
+	"os"
 
 	"github.com/ethereum/go-ethereum/consensus/istanbul"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -104,5 +106,14 @@ func (c *core) addReconstruct(seq, index uint64, share ed25519.Point) {
 		output := crypto.RecoverBeacon(c.nodeRecData[seq], c.threshold)
 		c.beacon[seq] = output
 		log.Info("Beacon output for", "number", seq, "output", hex.EncodeToString(output.Val))
+
+		// Logging handle prepare time
+		rectime := c.logdir + "rectime"
+		rectimef, err := os.OpenFile(rectime, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			log.Error("Can't open rectimef  file", "error", err)
+		}
+		fmt.Fprintln(rectimef, seq, c.address.Hex(), hex.EncodeToString(output.Val), c.Now())
+		rectimef.Close()
 	}
 }

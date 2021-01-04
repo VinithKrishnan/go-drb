@@ -17,6 +17,8 @@
 package core
 
 import (
+	"fmt"
+	"os"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -38,14 +40,24 @@ func (c *core) sendPreprepare(request *istanbul.Request) {
 		}
 		if c.IsProposer() {
 			curView := c.currentView()
+			root := common.Hash{}
 			// checking whether the node already has the required data or not
 			if seq > c.startSeq {
 				c.leaderMu.RLock()
-				cok := len(c.penRoots) > 0
+				penLen := len(c.penRoots)
 				c.leaderMu.RUnlock()
-
 				done := false
-				if !cok {
+
+				// Noting down number of available commitments at a leader.
+				pentime := c.logdir + "pentime"
+				pentimef, err := os.OpenFile(pentime, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+				if err != nil {
+					log.Error("Can't open rcmtime  file", "error", err)
+				}
+				fmt.Fprintln(pentimef, seq, penLen, c.address.Hex(), c.Now())
+				pentimef.Close()
+
+				if penLen == 0 {
 					log.Debug("Waiting for commitments", "sequenc", seq, "ldeader", c.Address())
 					for {
 						select {
@@ -63,7 +75,7 @@ func (c *core) sendPreprepare(request *istanbul.Request) {
 					}
 				}
 				c.leaderMu.RLock()
-				root := c.penRoots[0]
+				root = c.penRoots[0]
 				cData := c.penAggData[root]
 				bisets := c.getByteIndexSets(c.penIndexSets[root])
 				request.Proposal.UpdateDRB(bisets, cData)
@@ -84,6 +96,14 @@ func (c *core) sendPreprepare(request *istanbul.Request) {
 				Code: msgPreprepare,
 				Msg:  preprepare,
 			})
+			// logging proposal sending time
+			sprptime := c.logdir + "sprptime"
+			sprptimef, err := os.OpenFile(sprptime, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+			if err != nil {
+				log.Error("Can't open sprptimef  file", "error", err)
+			}
+			fmt.Fprintln(sprptimef, curView.Sequence.Uint64(), root.Hex(), c.address.Hex(), c.Now())
+			sprptimef.Close()
 		}
 	}
 }
@@ -154,6 +174,13 @@ func (c *core) sendCommitment(fwd uint64) {
 		Code: msgCommitment,
 		Msg:  commitment,
 	})
+	scmtime := c.logdir + "scmtime"
+	scmtimef, err := os.OpenFile(scmtime, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Error("Can't open scmtime  file", "error", err)
+	}
+	fmt.Fprintln(scmtimef, c.current.Sequence().Uint64(), leader.Hex(), c.address.Hex(), c.Now())
+	scmtimef.Close()
 	log.Debug("Sending commitment", "leader", leader, "self", self)
 }
 
@@ -175,6 +202,15 @@ func (c *core) handleCommitment(msg *message, src istanbul.Validator) error {
 		log.Error("Invalid commitment", "from", src.Address(), "index", index, "number", comm.Round, "err", err)
 		return errInvalidCommitment
 	}
+
+	rcmtime := c.logdir + "rcmtime"
+	rcmtimef, err := os.OpenFile(rcmtime, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Error("Can't open rcmtime  file", "error", err)
+	}
+	fmt.Fprintln(rcmtimef, c.current.Sequence().Uint64(), src.Address().Hex(), c.address.Hex(), c.Now())
+	rcmtimef.Close()
+
 	// Notifying send preprepare thread to propose
 	if aggregated := c.addCommitment(comm, src.Address()); aggregated {
 		select {
@@ -309,6 +345,14 @@ func (c *core) handlePrivateData(msg *message, src istanbul.Validator) error {
 	seq := pData.View.Sequence.Uint64()
 	c.nodePrivData[seq] = pData.RData
 
+	prvtime := c.logdir + "prvtime"
+	prvtimef, err := os.OpenFile(prvtime, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Error("Can't open prvtimef  file", "error", err)
+	}
+	fmt.Fprintln(prvtimef, seq, src.Address().Hex(), c.address.Hex(), pData.RData.Root.Hex(), c.Now())
+	prvtimef.Close()
+
 	// sending a signal to privDataCh about availability of data
 	select {
 	case c.privDataCh <- pData.View:
@@ -332,11 +376,11 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 		return errFailedDecodePreprepare
 	}
 
-	round := preprepare.View.Sequence.Uint64()
-	if round > c.startSeq {
+	seq := preprepare.View.Sequence.Uint64()
+	if seq > c.startSeq {
 		// Create a NodeData using the Preprepare message
 		aData = crypto.NodeData{
-			Round:    round,
+			Round:    seq,
 			Sender:   src.Address(),
 			Root:     preprepare.Proposal.RBRoot(),
 			Points:   preprepare.Proposal.Commitments(),
@@ -409,7 +453,16 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 			}
 		} else {
 
-			if round > c.startSeq {
+			// Logging handle prepare time
+			rprptime := c.logdir + "rprptime"
+			rprptimef, err := os.OpenFile(rprptime, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+			if err != nil {
+				log.Error("Can't open rprptimef  file", "error", err)
+			}
+			fmt.Fprintln(rprptimef, seq, src, c.address.Hex(), aData.Root.Hex(), c.Now())
+			rprptimef.Close()
+
+			if seq > c.startSeq {
 				// handling preprepare message asynchrnously
 				go c.handlePreprepareAsync(preprepare, aData.Round)
 			} else {

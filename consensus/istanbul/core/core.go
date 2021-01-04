@@ -18,8 +18,10 @@ package core
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 	"math/big"
+	"os"
 	"strconv"
 	"sync"
 	"time"
@@ -71,6 +73,12 @@ func New(backend istanbul.Backend, config *istanbul.Config) Engine {
 		penPrivData:        make(map[common.Hash]map[common.Address]crypto.RoundData),
 	}
 
+	if c.local {
+		c.logdir = "/Users/sourav/drb/log/"
+	} else {
+		c.logdir = "/home/ubuntu/drb/"
+	}
+
 	r.Register("consensus/istanbul/core/round", c.roundMeter)
 	r.Register("consensus/istanbul/core/sequence", c.sequenceMeter)
 	r.Register("consensus/istanbul/core/consensus", c.consensusTimer)
@@ -108,6 +116,7 @@ type core struct {
 	// drb locks
 	leaderMu sync.RWMutex
 	nodeMu   sync.RWMutex
+	logdir   string
 
 	// data used in forward commitment
 	penRoots     []common.Hash                        // pending roots
@@ -300,10 +309,24 @@ func (c *core) commit(view *istanbul.View) {
 			c.sendNextRoundChange()
 			return
 		}
+
+		fintime := c.logdir + "fintime"
+		fintimef, err := os.OpenFile(fintime, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			log.Error("Can't open fintimef  file", "error", err)
+		}
+		fmt.Fprintln(fintimef, view.Sequence.Uint64(), c.address.Hex(), proposal.RBRoot().Hex(), c.Now())
+		fintimef.Close()
+
 		if view.Sequence.Uint64() > c.startSeq {
 			go c.sendReconstruct(view)
 		}
 	}
+}
+
+// Now returns the current timestamp
+func (c *core) Now() int64 {
+	return time.Now().UnixNano() / int64(time.Millisecond)
 }
 
 // startNewRound starts a new round. if round equals to 0, it means to starts a new sequence

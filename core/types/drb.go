@@ -1,9 +1,10 @@
 package types
 
 import (
-	"github.com/ethereum/go-ethereum/crypto/ed25519"
 	"math/big"
 	"strings"
+
+	"github.com/ethereum/go-ethereum/crypto/ed25519"
 )
 
 // StringKey is a secret key in the string format
@@ -38,23 +39,3 @@ func StringToPoint(str string) ed25519.Point {
 	ybint, _ := new(big.Int).SetString(xy[1], 10)
 	return ed25519.NewPoint(*xbint, *ybint)
 }
-
-// public_key(string format) = x:y // first line of key_i.txt in edkeys folder
-// var xbint, _ = new(big.Int).SetString(x,10)
-// var ybint, _ = new(big.Int).SetString(y,10)
-// public_key(Point format)= NewPoint(xbtin.ybint)
-// secret_key(string format) = s // second line of key_i.txt in edkeys folder. Also ,every line in pubkey.txt.
-// var sbint, _ = new(big.Int).SetString(s,10)
-// secret_key(Scalar format) = NewScalar(sbint)
-
-// NewNodeData creates a new node data
-// func NewNodeData(round uint64, addr common.Address) crypto.NodeData {
-// 	return NodeData{
-// 		Round:    round,
-// 		Root:     common.Hash{},
-// 		Sender:   addr,
-// 		Points:   make(crypto.Points),
-// 		EncEvals: make(crypto.Points),
-// 		Proofs:   make(crypto.NizkProofs),
-// 	}
-// }
