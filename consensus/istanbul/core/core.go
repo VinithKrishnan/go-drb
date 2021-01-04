@@ -166,9 +166,9 @@ func (c *core) InitKeys(vals []common.Address) error {
 	// Initializing the public keys
 	pkPath := "pubkey.json"
 	keyPath := "key.json"
-	if c.local {
-		keyPath = "edkeys/k" + strconv.Itoa(c.index) + ".json"
-	}
+	// if c.local {
+	// 	keyPath = "edkeys/k" + strconv.Itoa(c.index) + ".json"
+	// }
 
 	// initializing number of nodes an threshold
 	c.setNumNodesTh(len(vals))
