@@ -73,12 +73,6 @@ func New(backend istanbul.Backend, config *istanbul.Config) Engine {
 		penPrivData:        make(map[common.Hash]map[common.Address]crypto.RoundData),
 	}
 
-	if c.local {
-		c.logdir = "/Users/sourav/drb/log/"
-	} else {
-		c.logdir = "/home/ubuntu/drb/"
-	}
-
 	r.Register("consensus/istanbul/core/round", c.roundMeter)
 	r.Register("consensus/istanbul/core/sequence", c.sequenceMeter)
 	r.Register("consensus/istanbul/core/consensus", c.consensusTimer)
@@ -165,10 +159,14 @@ type core struct {
 func (c *core) InitKeys(vals []common.Address) error {
 	// Initializing the public keys
 	pkPath := "pubkey.json"
+
+	// Local paths
+	// keyPath := "edkeys/k" + strconv.Itoa(c.index) + ".json"
+	// c.logdir = "/Users/sourav/drb/log/"
+
+	// Remote paths
 	keyPath := "key.json"
-	// if c.local {
-	// 	keyPath = "edkeys/k" + strconv.Itoa(c.index) + ".json"
-	// }
+	c.logdir = "/home/ubuntu/drb/"
 
 	// initializing number of nodes an threshold
 	c.setNumNodesTh(len(vals))
