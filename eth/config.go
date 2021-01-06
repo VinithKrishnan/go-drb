@@ -47,7 +47,7 @@ var DefaultConfig = Config{
 	StartSeq:           10,
 	ForwardSeq:         0,
 	NodeIndex:          0,
-	Local:              true,
+	Local:              false,
 	NetworkId:          1337,
 	LightPeers:         100,
 	UltraLightFraction: 75,

@@ -22,7 +22,7 @@ import (
 	"math"
 	"math/big"
 	"os"
-	// "strconv"
+	"strconv"
 	"sync"
 	"time"
 
@@ -70,7 +70,7 @@ func New(backend istanbul.Backend, config *istanbul.Config) Engine {
 		beacon:             make(map[uint64]ed25519.Point),
 		penAggData:         make(map[common.Hash]crypto.NodeData),
 		penIndexSets:       make(map[common.Hash][]common.Address),
-		penPrivData:        make(map[common.Hash]map[common.Address]crypto.RoundData),
+		penPrivData:        make(map[common.Hash]map[common.Address]*crypto.RoundData),
 	}
 
 	r.Register("consensus/istanbul/core/round", c.roundMeter)
@@ -117,7 +117,7 @@ type core struct {
 	penData      []map[common.Address]crypto.NodeData // future usable commitments
 	penAggData   map[common.Hash]crypto.NodeData      // future usable aggregate data
 	penIndexSets map[common.Hash][]common.Address     // index set of pending aggregated data
-	penPrivData  map[common.Hash]map[common.Address]crypto.RoundData
+	penPrivData  map[common.Hash]map[common.Address]*crypto.RoundData
 
 	// for other nodes
 	nodeAggData  map[uint64]crypto.NodeData          // height: [agg. poly. commit; agg. enc]
@@ -159,14 +159,15 @@ type core struct {
 func (c *core) InitKeys(vals []common.Address) error {
 	// Initializing the public keys
 	pkPath := "pubkey.json"
-
-	// Local paths
-	// keyPath := "edkeys/k" + strconv.Itoa(c.index) + ".json"
-	// c.logdir = "/Users/sourav/drb/log/"
-
-	// Remote paths
 	keyPath := "key.json"
 	c.logdir = "/home/ubuntu/drb/"
+	// Local paths
+	if c.local {
+		keyPath = "edkeys/k" + strconv.Itoa(c.index) + ".json"
+		c.logdir = "/Users/sourav/drb/log/"
+	}
+
+	// Remote paths
 
 	// initializing number of nodes an threshold
 	c.setNumNodesTh(len(vals))

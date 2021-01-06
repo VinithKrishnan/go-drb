@@ -136,11 +136,11 @@ func (c *core) sendPrivateData(view *istanbul.View, root common.Hash) {
 }
 
 // sendPrivateDataNode sends private data to a individual node
-func (c *core) sendPrivateDataNode(view *istanbul.View, rcvAddr common.Address, rData crypto.RoundData) {
+func (c *core) sendPrivateDataNode(view *istanbul.View, rcvAddr common.Address, rData *crypto.RoundData) {
 	logger := c.logger.New("state", c.state)
 	pData, err := Encode(&istanbul.PrivateData{
 		View:  view,
-		RData: rData,
+		RData: *rData,
 	})
 	if err != nil {
 		logger.Error("Failed to encode pData", "err", err)
@@ -280,7 +280,7 @@ func (c *core) aggregate(idx int) {
 	c.penRoots = append(c.penRoots, root)
 	c.penAggData[root] = aggData
 	c.penIndexSets[root] = aisets
-	c.penPrivData[root] = make(map[common.Address]crypto.RoundData)
+	c.penPrivData[root] = make(map[common.Address]*crypto.RoundData)
 
 	for raddr, ridx := range c.addrIDMap {
 		var (
@@ -297,7 +297,7 @@ func (c *core) aggregate(idx int) {
 			proofs[ii] = nData.Proofs[ridx]
 			ii++
 		}
-		c.penPrivData[root][raddr] = crypto.RoundData{
+		c.penPrivData[root][raddr] = &crypto.RoundData{
 			Root:     root,
 			IndexSet: aisets,
 			Commits:  commits,
