@@ -493,7 +493,7 @@ func (c *core) handlePreprepareAsync(preprepare *istanbul.Preprepare, seq uint64
 	c.nodeMu.RUnlock()
 	if !ok {
 		done := false
-		log.Debug("Waiting for private data from leader!")
+		log.Info("Waiting for private data from leader!")
 		for {
 			select {
 			// TODO(sourav): We can change this to a bool value indicating
