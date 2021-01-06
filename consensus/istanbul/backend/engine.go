@@ -146,10 +146,10 @@ func (sb *backend) verifyHeader(chain consensus.ChainReader, header *types.Heade
 	}
 
 	// Don't waste time checking blocks from the future (adjusting for allowed threshold)
-	adjustedTimeNow := now().Add(time.Duration(sb.config.AllowedFutureBlockTime) * time.Second).Unix()
-	if header.Time > uint64(adjustedTimeNow) {
-		return consensus.ErrFutureBlock
-	}
+	// adjustedTimeNow := now().Add(time.Duration(sb.config.AllowedFutureBlockTime) * time.Second).Unix()
+	// if header.Time > uint64(adjustedTimeNow) {
+	// 	return consensus.ErrFutureBlock
+	// }
 
 	// Ensure that the extra data format is satisfied
 	if _, err := types.ExtractIstanbulExtra(header); err != nil {
@@ -196,9 +196,11 @@ func (sb *backend) verifyCascadingFields(chain consensus.ChainReader, header *ty
 	if parent == nil || parent.Number.Uint64() != number-1 || parent.Hash() != header.ParentHash {
 		return consensus.ErrUnknownAncestor
 	}
-	if parent.Time+sb.config.BlockPeriod > header.Time {
-		return errInvalidTimestamp
-	}
+	// TODO(sourav): remove the block period check!
+	// if parent.Time+sb.config.BlockPeriod > header.Time {
+	// 	return errInvalidTimestamp
+	// }
+
 	// Verify validators in extraData. Validators in snapshot and extraData should be the same.
 	snap, err := sb.snapshot(chain, number-1, header.ParentHash, parents)
 	if err != nil {
@@ -405,10 +407,11 @@ func (sb *backend) Prepare(chain consensus.ChainReader, header *types.Header) er
 	header.EncEvals = crypto.Points{}
 
 	// set header's timestamp
-	header.Time = parent.Time + sb.config.BlockPeriod
-	if header.Time < uint64(time.Now().Unix()) {
-		header.Time = uint64(time.Now().Unix())
-	}
+	// TODO(sourav): set header's timestamp as the current timestamp!
+	// header.Time = parent.Time + sb.config.BlockPeriod
+	// if header.Time < uint64(time.Now().Unix()) {
+	header.Time = uint64(time.Now().Unix())
+	// }
 	return nil
 }
 
