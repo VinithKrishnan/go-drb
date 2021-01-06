@@ -282,16 +282,12 @@ func (c *core) aggregate(idx int) {
 
 	for raddr, ridx := range c.addrIDMap {
 		var (
-			commits  = make(crypto.Points, c.threshold)
-			encEvals = make(crypto.Points, c.threshold)
-			proofs   = make(crypto.NizkProofs, c.threshold)
+			proofs = make(crypto.NizkProofs, c.threshold)
 		)
 
 		// initializing round data for every node
 		ii := 0
 		for _, nData := range pendings {
-			commits[ii] = nData.Points[ridx]
-			encEvals[ii] = nData.EncEvals[ridx]
 			proofs[ii] = nData.Proofs[ridx]
 			ii++
 		}
