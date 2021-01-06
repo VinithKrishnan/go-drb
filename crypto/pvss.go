@@ -23,7 +23,6 @@ var (
 type NodeData struct {
 	Round    uint64
 	Root     common.Hash // Nil root indicates commitment phase poly. commitment
-	Sender   common.Address
 	Points   Points
 	EncEvals Points
 	Proofs   NizkProofs
@@ -34,8 +33,6 @@ type RoundData struct {
 	Round    uint64
 	Root     common.Hash
 	IndexSet []common.Address
-	Commits  Points
-	EncEvals Points
 	Proofs   NizkProofs
 }
 
@@ -356,13 +353,10 @@ func AggregateCommit(total int, indexSets []int, data []*NodeData) *NodeData {
 	lenIS := len(indexSets)
 	for id := 0; id < lenIS; id++ {
 		nodeData := data[id]
-		for i, point := range nodeData.Points {
+		for i, proof := range nodeData.Proofs {
 			if id == 0 {
-				commits[i] = point
-				encEvals[i] = nodeData.EncEvals[i]
-			} else {
-				commits[i].Add(point)
-				encEvals[i].Add(nodeData.EncEvals[i])
+				commits[i] = proof.Commit
+				encEvals[i] = proof.EncEval
 			}
 		}
 	}
@@ -395,14 +389,11 @@ func sanityNodeData(aggr bool, com *NodeData, total, ths int) bool {
 }
 
 // sanityRoundData performs basic checks about RoundData
-func sanityRoundData(rdata RoundData, smrRoot common.Hash, index, total, ths int) bool {
+func sanityRoundData(rdata *RoundData, smrRoot common.Hash, ths int) bool {
 	if smrRoot != rdata.Root {
 		return false
 	}
-	indexLen := len(rdata.IndexSet)
-	commitLen := len(rdata.Commits)
-	encLen := len(rdata.EncEvals)
-	if indexLen < ths || indexLen != commitLen || indexLen != encLen {
+	if len(rdata.IndexSet) < ths {
 		return false
 	}
 	return true

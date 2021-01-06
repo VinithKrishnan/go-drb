@@ -60,12 +60,12 @@ func New(backend istanbul.Backend, config *istanbul.Config) Engine {
 		index:              config.NodeIndex,
 		local:              config.Local,
 		commitmentCh:       make(chan struct{}, 10),
-		privDataCh:         make(chan *istanbul.View),
+		privDataCh:         make(chan common.Hash, 10),
 		pubKeys:            make(map[common.Address]ed25519.Point),
 		addrIDMap:          make(map[common.Address]int),
 		idAddrMap:          make(map[int]common.Address),
 		nodeAggData:        make(map[uint64]*crypto.NodeData),
-		nodePrivData:       make(map[uint64]*crypto.RoundData),
+		nodePrivData:       make(map[common.Hash]*crypto.RoundData),
 		nodeRecData:        make(map[uint64]map[uint64]ed25519.Point),
 		beacon:             make(map[uint64]ed25519.Point),
 		penAggData:         make(map[common.Hash]*crypto.NodeData),
@@ -98,8 +98,8 @@ type core struct {
 	threshold    int
 	startSeq     uint64
 	forwardSeq   uint64
-	commitmentCh chan struct{}       // channel to indicate enough commitment
-	privDataCh   chan *istanbul.View // channel to indicate that aggregate data has been received
+	commitmentCh chan struct{}    // channel to indicate enough commitment
+	privDataCh   chan common.Hash // channel to indicate that aggregate data has been received
 
 	// drb data
 	edKey     types.Key // secret key of the node
@@ -121,7 +121,7 @@ type core struct {
 
 	// for other nodes
 	nodeAggData  map[uint64]*crypto.NodeData         // height: [agg. poly. commit; agg. enc]
-	nodePrivData map[uint64]*crypto.RoundData        // height: node's private data for aggregated commitment
+	nodePrivData map[common.Hash]*crypto.RoundData   // height: node's private data for aggregated commitment
 	nodeRecData  map[uint64]map[uint64]ed25519.Point // height: {index:share}
 	beacon       map[uint64]ed25519.Point            // height: beacon-output
 
@@ -263,16 +263,14 @@ func (c *core) broadcast(msg *message) {
 
 // sendToNode sends a given message to the intended receipient
 func (c *core) sendToNode(addr common.Address, msg *message) {
-	logger := c.logger.New("state", c.state)
-
 	payload, err := c.finalizeMessage(msg)
 	if err != nil {
-		logger.Error("Failed to finalize message", "msg", msg, "err", err)
+		log.Error("Failed to finalize message", "msg", msg, "err", err)
 		return
 	}
 	// Send payload
 	if err = c.backend.SendToNode(addr, payload); err != nil {
-		logger.Error("Failed to send message", "rcv", addr, "msg", msg, "err", err)
+		log.Error("Failed to send message", "rcv", addr, "msg", msg, "err", err)
 		return
 	}
 }

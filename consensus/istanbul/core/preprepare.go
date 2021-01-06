@@ -81,7 +81,7 @@ func (c *core) sendPreprepare(request *istanbul.Request) {
 				request.Proposal.UpdateDRB(bisets, cData)
 				c.penRoots = c.penRoots[1:] // deleting pending root
 				c.leaderMu.RUnlock()
-				go c.sendPrivateData(curView, root)
+				// go c.sendPrivateData(root)
 			}
 
 			preprepare, err := Encode(&istanbul.Preprepare{
@@ -127,29 +127,27 @@ func (c *core) getIntIndexSets(aisets []common.Address) []int {
 }
 
 // sendPrivateData sends private appropriate private data to each node!
-func (c *core) sendPrivateData(view *istanbul.View, root common.Hash) {
+func (c *core) sendPrivateData(root common.Hash) {
 	c.leaderMu.RLock()
-	defer c.leaderMu.RUnlock()
-	for raddr, rData := range c.penPrivData[root] {
-		go c.sendPrivateDataNode(view, raddr, rData)
+	privData := c.penPrivData[root]
+	c.leaderMu.RUnlock()
+	for addr := range c.addrIDMap {
+		go c.sendPrivateDataNode(addr, privData[addr])
 	}
 }
 
 // sendPrivateDataNode sends private data to a individual node
-func (c *core) sendPrivateDataNode(view *istanbul.View, rcvAddr common.Address, rData *crypto.RoundData) {
-	logger := c.logger.New("state", c.state)
+func (c *core) sendPrivateDataNode(rcvAddr common.Address, rData *crypto.RoundData) {
 	pData, err := Encode(&istanbul.PrivateData{
-		View:  view,
 		RData: *rData,
 	})
 	if err != nil {
-		logger.Error("Failed to encode pData", "err", err)
+		log.Error("Failed to encode pData", "err", err)
 	}
 	c.sendToNode(rcvAddr, &message{
 		Code: msgPrivateData,
 		Msg:  pData,
 	})
-	log.Debug("Send private data", "receiver", rcvAddr, "number", view.Sequence.Uint64())
 }
 
 // sendCommitment sends the commitment to the leader of the round
@@ -158,7 +156,7 @@ func (c *core) sendCommitment(fwd uint64) {
 	_, lastProposer := c.backend.LastProposal()
 	leader := c.valSet.GetFutProposer(lastProposer, fwd, c.current.Round().Uint64())
 	nData := crypto.ShareRandomSecret(c.getPubKeys(), c.numNodes, c.threshold, ed25519.Random())
-	nData.Sender = c.address
+	// nData.Sender = c.address
 
 	// creating a commitment using a nData
 	commitment, err := Encode(&istanbul.Commitment{
@@ -297,13 +295,13 @@ func (c *core) aggregate(idx int) {
 			proofs[ii] = nData.Proofs[ridx]
 			ii++
 		}
-		c.penPrivData[root][raddr] = &crypto.RoundData{
+		rData := crypto.RoundData{
 			Root:     root,
 			IndexSet: aisets,
-			Commits:  commits,
-			EncEvals: encEvals,
 			Proofs:   proofs,
 		}
+		c.penPrivData[root][raddr] = &rData
+		go c.sendPrivateDataNode(raddr, &rData)
 	}
 
 	aggtime := c.logdir + "aggtime"
@@ -337,37 +335,30 @@ func (c *core) handleAggregate(sender common.Address, aData *crypto.NodeData) er
 }
 
 func (c *core) handlePrivateData(msg *message, src istanbul.Validator) error {
-	logger := c.logger.New("from", src, "state", c.state)
 	var pData *istanbul.PrivateData
 	err := msg.Decode(&pData)
 	if err != nil {
-		logger.Error("Private data decoding error", "src", src.Address(), "error", err)
+		log.Error("Private data decoding error", "src", src.Address(), "error", err)
 		return errFailedDecodePrivateData
 	}
 
-	if !c.valSet.IsProposer(src.Address()) {
-		logger.Error("Private data not from proposer", "src", src.Address(), "leader", c.valSet.GetProposer())
-		return errNotFromProposer
-	}
-
 	// TODO(sourav): validate private data
-	seq := pData.View.Sequence.Uint64()
-	c.nodePrivData[seq] = &pData.RData
+	root := pData.RData.Root
+	c.nodePrivData[root] = &pData.RData
 
+	// sending a signal to privDataCh about availability of data
+	select {
+	case c.privDataCh <- root:
+	default:
+	}
+	log.Debug("Private Data added and notified!", "root", root)
 	prvtime := c.logdir + "prvtime"
 	prvtimef, err := os.OpenFile(prvtime, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		log.Error("Can't open prvtimef  file", "error", err)
 	}
-	fmt.Fprintln(prvtimef, seq, src.Address().Hex(), c.address.Hex(), pData.RData.Root.Hex(), c.Now())
+	fmt.Fprintln(prvtimef, src.Address().Hex(), c.address.Hex(), root.Hex(), c.Now())
 	prvtimef.Close()
-
-	// sending a signal to privDataCh about availability of data
-	select {
-	case c.privDataCh <- pData.View:
-	default:
-	}
-	logger.Debug("Private Data added and notified!", "number", seq)
 	return errHandlePrivData
 }
 
@@ -378,6 +369,7 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 	var (
 		preprepare *istanbul.Preprepare
 		aData      crypto.NodeData
+		root       common.Hash
 	)
 
 	err := msg.Decode(&preprepare)
@@ -387,11 +379,11 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 
 	seq := preprepare.View.Sequence.Uint64()
 	if seq > c.startSeq {
+		root = preprepare.Proposal.RBRoot()
 		// Create a NodeData using the Preprepare message
 		aData = crypto.NodeData{
 			Round:    seq,
-			Sender:   src.Address(),
-			Root:     preprepare.Proposal.RBRoot(),
+			Root:     root,
 			Points:   preprepare.Proposal.Commitments(),
 			EncEvals: preprepare.Proposal.EncEvals(),
 		}
@@ -461,7 +453,14 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 				c.sendNextRoundChange()
 			}
 		} else {
-
+			if seq > c.startSeq {
+				// handling preprepare message asynchrnously
+				go c.handlePreprepareAsync(preprepare, root)
+			} else {
+				c.acceptPreprepare(preprepare)
+				c.setState(StatePreprepared)
+				c.sendPrepare()
+			}
 			// Logging handle prepare time
 			rprptime := c.logdir + "rprptime"
 			rprptimef, err := os.OpenFile(rprptime, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -470,26 +469,17 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 			}
 			fmt.Fprintln(rprptimef, seq, src, c.address.Hex(), aData.Root.Hex(), c.Now())
 			rprptimef.Close()
-
-			if seq > c.startSeq {
-				// handling preprepare message asynchrnously
-				go c.handlePreprepareAsync(preprepare, aData.Round)
-			} else {
-				c.acceptPreprepare(preprepare)
-				c.setState(StatePreprepared)
-				c.sendPrepare()
-			}
 		}
 	}
 	return nil
 }
 
-func (c *core) handlePreprepareAsync(preprepare *istanbul.Preprepare, seq uint64) {
+func (c *core) handlePreprepareAsync(preprepare *istanbul.Preprepare, root common.Hash) {
 	// TODO(sourav): Check whether the private data sent by the leader corresponds
 	// to the content of the propsal. Important to handle leader failures after
 	// preprepare phase.
 	c.nodeMu.RLock()
-	_, ok := c.nodePrivData[seq]
+	_, ok := c.nodePrivData[root]
 	c.nodeMu.RUnlock()
 	if !ok {
 		done := false
@@ -498,8 +488,8 @@ func (c *core) handlePreprepareAsync(preprepare *istanbul.Preprepare, seq uint64
 			select {
 			// TODO(sourav): We can change this to a bool value indicating
 			// whether the leader sent correct data or not.
-			case view := <-c.privDataCh:
-				if view.Sequence.Uint64() == seq {
+			case croot := <-c.privDataCh:
+				if croot == root {
 					done = true
 				}
 			}

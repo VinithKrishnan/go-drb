@@ -117,7 +117,6 @@ type Commitment struct {
 
 // PrivateData has the data a leader privately sends to a node
 type PrivateData struct {
-	View  *View
 	RData crypto.RoundData
 }
 
