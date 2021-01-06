@@ -197,7 +197,7 @@ func (c *core) handleCommitment(msg *message, src istanbul.Validator) error {
 		return errFailedDecodeCommitment
 	}
 
-	comm := cmsg.NData
+	comm := &cmsg.NData
 	if err := crypto.ValidateCommit(false, comm, c.getPubKeys(), c.numNodes, c.threshold); err != nil {
 		log.Error("Invalid commitment", "from", src.Address(), "index", index, "number", comm.Round, "err", err)
 		return errInvalidCommitment
@@ -222,7 +222,7 @@ func (c *core) handleCommitment(msg *message, src istanbul.Validator) error {
 }
 
 // addCommitment add commitments
-func (c *core) addCommitment(com crypto.NodeData, sender common.Address) bool {
+func (c *core) addCommitment(com *crypto.NodeData, sender common.Address) bool {
 	// Locking state variables of leader
 	c.leaderMu.Lock()
 	defer c.leaderMu.Unlock()
@@ -240,7 +240,7 @@ func (c *core) addCommitment(com crypto.NodeData, sender common.Address) bool {
 
 	if fidx == -1 {
 		fidx = pLen
-		c.penData = append(c.penData, map[common.Address]crypto.NodeData{})
+		c.penData = append(c.penData, map[common.Address]*crypto.NodeData{})
 		c.penData[fidx][sender] = com
 		// Returning false as we know that only one element is present in pending
 		if c.threshold > 1 {
@@ -262,7 +262,7 @@ func (c *core) aggregate(idx int) {
 	var (
 		isets  = make([]int, c.threshold)
 		aisets = make([]common.Address, c.threshold)
-		data   = make([]crypto.NodeData, c.threshold)
+		data   = make([]*crypto.NodeData, c.threshold)
 	)
 	// prepare input for the aggregate functions
 	pendings := c.penData[idx]
@@ -318,7 +318,7 @@ func (c *core) aggregate(idx int) {
 }
 
 // handleAggregate initiates the procedure to handle aggregated message
-func (c *core) handleAggregate(sender common.Address, aData crypto.NodeData) error {
+func (c *core) handleAggregate(sender common.Address, aData *crypto.NodeData) error {
 	if !c.valSet.IsProposer(sender) {
 		log.Error("Aggregate not from leader", "sender", sender, "leader", c.valSet.GetProposer())
 		return errNotFromProposer
@@ -352,7 +352,7 @@ func (c *core) handlePrivateData(msg *message, src istanbul.Validator) error {
 
 	// TODO(sourav): validate private data
 	seq := pData.View.Sequence.Uint64()
-	c.nodePrivData[seq] = pData.RData
+	c.nodePrivData[seq] = &pData.RData
 
 	prvtime := c.logdir + "prvtime"
 	prvtimef, err := os.OpenFile(prvtime, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -396,7 +396,7 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 			EncEvals: preprepare.Proposal.EncEvals(),
 		}
 
-		if err := c.handleAggregate(src.Address(), aData); err != nil {
+		if err := c.handleAggregate(src.Address(), &aData); err != nil {
 			log.Error("Error in HandleAggregate", "src", src.Address(), "rnd", aData.Round, "err", err)
 			return err
 		}

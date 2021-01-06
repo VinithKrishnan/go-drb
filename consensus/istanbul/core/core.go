@@ -64,11 +64,11 @@ func New(backend istanbul.Backend, config *istanbul.Config) Engine {
 		pubKeys:            make(map[common.Address]ed25519.Point),
 		addrIDMap:          make(map[common.Address]int),
 		idAddrMap:          make(map[int]common.Address),
-		nodeAggData:        make(map[uint64]crypto.NodeData),
-		nodePrivData:       make(map[uint64]crypto.RoundData),
+		nodeAggData:        make(map[uint64]*crypto.NodeData),
+		nodePrivData:       make(map[uint64]*crypto.RoundData),
 		nodeRecData:        make(map[uint64]map[uint64]ed25519.Point),
 		beacon:             make(map[uint64]ed25519.Point),
-		penAggData:         make(map[common.Hash]crypto.NodeData),
+		penAggData:         make(map[common.Hash]*crypto.NodeData),
 		penIndexSets:       make(map[common.Hash][]common.Address),
 		penPrivData:        make(map[common.Hash]map[common.Address]*crypto.RoundData),
 	}
@@ -113,15 +113,15 @@ type core struct {
 	logdir   string
 
 	// data used in forward commitment
-	penRoots     []common.Hash                        // pending roots
-	penData      []map[common.Address]crypto.NodeData // future usable commitments
-	penAggData   map[common.Hash]crypto.NodeData      // future usable aggregate data
-	penIndexSets map[common.Hash][]common.Address     // index set of pending aggregated data
+	penRoots     []common.Hash                         // pending roots
+	penData      []map[common.Address]*crypto.NodeData // future usable commitments
+	penAggData   map[common.Hash]*crypto.NodeData      // future usable aggregate data
+	penIndexSets map[common.Hash][]common.Address      // index set of pending aggregated data
 	penPrivData  map[common.Hash]map[common.Address]*crypto.RoundData
 
 	// for other nodes
-	nodeAggData  map[uint64]crypto.NodeData          // height: [agg. poly. commit; agg. enc]
-	nodePrivData map[uint64]crypto.RoundData         // height: node's private data for aggregated commitment
+	nodeAggData  map[uint64]*crypto.NodeData         // height: [agg. poly. commit; agg. enc]
+	nodePrivData map[uint64]*crypto.RoundData        // height: node's private data for aggregated commitment
 	nodeRecData  map[uint64]map[uint64]ed25519.Point // height: {index:share}
 	beacon       map[uint64]ed25519.Point            // height: beacon-output
 

@@ -351,7 +351,7 @@ func (b *Block) Header() *Header { return CopyHeader(b.header) }
 func (b *Block) Body() *Body { return &Body{b.transactions, b.uncles} }
 
 // UpdateDRB updates DRB fields of the block
-func (b *Block) UpdateDRB(isets []byte, cdata crypto.NodeData) {
+func (b *Block) UpdateDRB(isets []byte, cdata *crypto.NodeData) {
 	b.header.IndexSet = isets
 	b.header.Commitments = cdata.Points
 	b.header.EncEvals = cdata.EncEvals

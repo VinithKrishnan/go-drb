@@ -348,7 +348,7 @@ func VerifyShares(proofs NizkProofs, pubKeys Points, total, ths int) bool {
 }
 
 // AggregateCommit aggregates polynomial commitment
-func AggregateCommit(total int, indexSets []int, data []NodeData) NodeData {
+func AggregateCommit(total int, indexSets []int, data []*NodeData) *NodeData {
 	var (
 		commits  = make(Points, total)
 		encEvals = make(Points, total)
@@ -367,7 +367,7 @@ func AggregateCommit(total int, indexSets []int, data []NodeData) NodeData {
 		}
 	}
 	root := aggrMerkleRoot(indexSets, commits, encEvals) // compute merkle root of "commits|encEvals|indexSets"
-	return NodeData{
+	return &NodeData{
 		Root:     root,
 		Points:   commits,
 		EncEvals: encEvals,
@@ -375,7 +375,7 @@ func AggregateCommit(total int, indexSets []int, data []NodeData) NodeData {
 }
 
 // sanityNodeData checks basic structure of a polynomial commitment
-func sanityNodeData(aggr bool, com NodeData, total, ths int) bool {
+func sanityNodeData(aggr bool, com *NodeData, total, ths int) bool {
 	// Check for existence of Merkle root
 	if aggr && com.Root == (common.Hash{}) {
 		return false
@@ -453,7 +453,7 @@ func MerkleRoot(data []byte) common.Hash {
 }
 
 // ValidateCommit checks for correctness of a aggregated message
-func ValidateCommit(aggr bool, com NodeData, pubKeys Points, total, ths int) error {
+func ValidateCommit(aggr bool, com *NodeData, pubKeys Points, total, ths int) error {
 	// check basic sanity such as length
 	if !sanityNodeData(aggr, com, total, ths) {
 		return errInvalidSanityCheck

@@ -38,7 +38,7 @@ type Proposal interface {
 	RBRoot() common.Hash
 	Commitments() crypto.Points
 	EncEvals() crypto.Points
-	UpdateDRB([]byte, crypto.NodeData)
+	UpdateDRB([]byte, *crypto.NodeData)
 
 	EncodeRLP(w io.Writer) error
 
