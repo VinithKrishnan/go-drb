@@ -9,7 +9,8 @@ import (
 	"reflect"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto/ed25519"
+	// "github.com/ethereum/go-ethereum/crypto/ed25519"
+	"ed25519"
 	"github.com/ethereum/go-ethereum/log"
 )
 
@@ -66,16 +67,17 @@ var (
 
 // PointG computes the base point
 func PointG() ed25519.Point {
+
 	has := sha256.New()
-	has.Write(ed25519.B.Val)
+	has.Write(ed25519.B.Bytes())
 	bs := has.Sum(nil)
-	Pt, _ := ed25519.Point_from_uniform(bs)
+	Pt:= ed25519.Point_from_uniform(bs)
 	return Pt
 }
 
 // Polynomial is defined as a list of scalars
 type Polynomial struct {
-	coeffs Scalars
+	coeffs []ed25519.Scalar
 }
 
 // Init Initializes polynomial with given coefficients
@@ -85,12 +87,13 @@ func (p Polynomial) Init(s Scalars) {
 
 // Eval evaluates polynomial at arg and returns evaluation
 func (p Polynomial) Eval(arg int) ed25519.Scalar {
-	x := ed25519.NewScalar(*big.NewInt(int64(arg)))
+
+	x := ed25519.BintToScalar(*big.NewInt(int64(arg)))
 	result := p.coeffs[0].Add(p.coeffs[1].Mul(x))
-	xpow := x.Copy()
+	x_pow := x.Copy()
 	for i := 2; i < len(p.coeffs); i++ {
-		xpow = xpow.Mul(x)
-		result = result.Add(p.coeffs[i].Mul(xpow))
+		x_pow = x_pow.Mul(x)
+		result = result.Add(p.coeffs[i].Mul(x_pow))
 	}
 	return result
 }
@@ -98,7 +101,8 @@ func (p Polynomial) Eval(arg int) ed25519.Scalar {
 // RandomWithSecret returns a polynomial with random coefficients from Zq.
 // p(x) = c_0 + c_1*x + ... c_{degree} * x^{degree}
 func RandomWithSecret(degree int, secret ed25519.Scalar) Polynomial {
-	var coeffs Scalars
+
+	var coeffs []ed25519.Scalar
 	coeffs = append(coeffs, secret)
 	for i := 1; i <= degree; i++ {
 		coeffs = append(coeffs, ed25519.Random())
@@ -108,7 +112,8 @@ func RandomWithSecret(degree int, secret ed25519.Scalar) Polynomial {
 
 // Random similar to above function . But randomly chooses secret Scalar parameter
 func Random(degree int) Polynomial {
-	var coeffs Scalars
+
+	var coeffs []ed25519.Scalar
 	for i := 0; i <= degree; i++ {
 		coeffs = append(coeffs, ed25519.Random())
 	}
@@ -209,10 +214,10 @@ func DleqDeriveBatchChal(x Points, y Points, a1 Points, a2 Points) ed25519.Scala
 	n := len(x)
 	var bytestring []byte
 	for i := 0; i < n; i++ {
-		bytestring = append(bytestring, x[i].Val...)
-		bytestring = append(bytestring, y[i].Val...)
-		bytestring = append(bytestring, a1[i].Val...)
-		bytestring = append(bytestring, a2[i].Val...)
+		bytestring = append(bytestring, x[i].Bytes()...)
+		bytestring = append(bytestring, y[i].Bytes()...)
+		bytestring = append(bytestring, a1[i].Bytes()...)
+		bytestring = append(bytestring, a2[i].Bytes()...)
 	}
 	hash := sha512.New()
 	hash.Write(bytestring)
@@ -258,10 +263,10 @@ func DleqProve(g ed25519.Point, h ed25519.Point, x ed25519.Point, y ed25519.Poin
 // DleqDeriveChal computes the dleq challenge
 func DleqDeriveChal(x ed25519.Point, y ed25519.Point, a1 ed25519.Point, a2 ed25519.Point) ed25519.Scalar {
 	var bytestring []byte
-	bytestring = append(bytestring, x.Val...)
-	bytestring = append(bytestring, y.Val...)
-	bytestring = append(bytestring, a1.Val...)
-	bytestring = append(bytestring, a2.Val...)
+	bytestring = append(bytestring, x.Bytes()...)
+	bytestring = append(bytestring, y.Bytes()...)
+	bytestring = append(bytestring, a1.Bytes()...)
+	bytestring = append(bytestring, a2.Bytes()...)
 
 	hash := sha512.New()
 	hash.Write(bytestring)
@@ -340,10 +345,15 @@ func VerifyShares(proofs NizkProofs, pubKeys Points, total, ths int) bool {
 
 	// 2. verify the validity of the shares by sampling and testing with a random codeword
 	codeword := RandomCodeword(total, ths)
-	product := proofs[0].Commit.Mul(codeword[0])
-	for i := 1; i < total; i++ {
-		product = product.Add(proofs[i].Commit.Mul(codeword[i]))
+	// product := proofs[0].Commit.Mul(codeword[0])
+	// for i := 1; i < total; i++ {
+	// 	product = product.Add(proofs[i].Commit.Mul(codeword[i]))
+	// }
+	var commitments []ed25519.Point
+	for i := 1; i< total;i++ {
+		commitments = append(commitments,proofs[i].Commit)
 	}
+	product := ed25519.MSM(codeword,commitments)
 	return product.Equal(ed25519.ONE)
 }
 
@@ -412,10 +422,11 @@ func sanityRoundData(rdata RoundData, smrRoot common.Hash, index, total, ths int
 // codeword
 func validatePCommit(commitments Points, numNodes, threshold int) bool {
 	codeword := RandomCodeword(numNodes, threshold)
-	product := commitments[0].Mul(codeword[0])
-	for i := 1; i < numNodes; i++ {
-		product = product.Add(commitments[i].Mul(codeword[i]))
-	}
+	// product := commitments[0].Mul(codeword[0])
+	// for i := 1; i < numNodes; i++ {
+	// 	product = product.Add(commitments[i].Mul(codeword[i]))
+	// }
+	product := ed25519.MSM(codeword,commitments)
 	return product.Equal(ed25519.ONE)
 }
 
@@ -434,10 +445,10 @@ func aggrMerkleRoot(isets []int, commits, encEvals Points) common.Hash {
 		bytestring = append(bytestring, bs...)
 	}
 	for _, com := range commits {
-		bytestring = append(bytestring, com.Val...)
+		bytestring = append(bytestring, com.Bytes()...)
 	}
 	for _, enc := range encEvals {
-		bytestring = append(bytestring, enc.Val...)
+		bytestring = append(bytestring, enc.Bytes()...)
 	}
 
 	hash := sha256.New()
@@ -512,16 +523,22 @@ func VerifySecret(secret ed25519.Scalar, commitments []ed25519.Point, threshold 
 func Recover(shares Points, threshold int) ed25519.Point {
 	var idxs Scalars
 	for i := 1; i <= threshold; i++ {
-		idxs = append(idxs, ed25519.NewScalar(*big.NewInt(int64(i))))
+		idxs = append(idxs, ed25519.BintToScalar(*big.NewInt(int64(i))))
 	}
 
-	rec := ed25519.B // initialing it, will be subtracted later
+	// rec := ed25519.B // initialing it, will be subtracted later
+
+	var LagrangeCoefficients []ed25519.Scalar
+	var Shares []ed25519.Point
 	for idx := 0; idx < threshold; idx++ {
-		t := LagrangeCoefficientScalar(ed25519.NewScalar(*big.NewInt(int64(idx + 1))), idxs)
-		a := shares[idx].Mul(t)
-		rec = rec.Add(a)
+		// t := LagrangeCoefficientScalar(ed25519.BintToScalar(*big.NewInt(int64(idx + 1))), idxs)
+		// a := shares[idx].Mul(t)
+		// rec = rec.Add(a)
+		LagrangeCoefficients = append(LagrangeCoefficients,LagrangeCoefficientScalar(ed25519.BintToScalar(*big.NewInt(int64(idx + 1))), idxs))
+		Shares = append(Shares,shares[idx])
 	}
-	return rec.Sub(ed25519.B)
+	rec := ed25519.MSM(LagrangeCoefficients,Shares)
+	return rec
 }
 
 // RecoverBeacon computes the beacon output
@@ -531,19 +548,27 @@ func RecoverBeacon(shares map[uint64]ed25519.Point, threshold int) ed25519.Point
 	idxs := make(Scalars, threshold)
 	i := 0
 	for idx := range shares {
-		idxs[i] = ed25519.NewScalar(*new(big.Int).SetUint64(idx + 1))
+		idxs[i] = ed25519.BintToScalar(*new(big.Int).SetUint64(idx + 1))
 		i++
 	}
 
 	// Interpolating the beacon output
-	rec := ed25519.B
+	// rec := ed25519.B
+	var LagrangeCoefficients []ed25519.Scalar
+	var Shares []ed25519.Point
 	for idx, point := range shares {
-		sIdx := ed25519.NewScalar(*new(big.Int).SetUint64(idx + 1))
-		t := LagrangeCoefficientScalar(sIdx, idxs)
-		a := point.Mul(t)
-		rec = rec.Add(a)
+		// sIdx := ed25519.BintToScalar(*new(big.Int).SetUint64(idx + 1))
+		// t := LagrangeCoefficientScalar(sIdx, idxs)
+		// a := point.Mul(t)
+		// rec = rec.Add(a)
+
+		LagrangeCoefficients = append(LagrangeCoefficients,LagrangeCoefficientScalar(ed25519.BintToScalar(*big.NewInt(int64(idx + 1))), idxs))
+		Shares = append(Shares,point)
 	}
-	return rec.Sub(ed25519.B)
+	rec := ed25519.MSM(LagrangeCoefficients,Shares)
+	return rec
+
+	// return rec.Sub(ed25519.B)
 }
 
 // RandomCodeword returns a random dual code
@@ -551,14 +576,14 @@ func RandomCodeword(numNodes int, threshold int) Scalars {
 	var codeword Scalars
 	f := Random(numNodes - threshold - 1)
 	for i := 1; i <= numNodes; i++ {
-		vi := ed25519.NewScalar(*big.NewInt(1))
+		vi := ed25519.BintToScalar(*big.NewInt(1))
 		for j := 1; j <= numNodes; j++ {
 			if j != i {
 				numerator := new(big.Int).Sub(big.NewInt(int64(i)), big.NewInt(int64(j)))
-				vi = vi.Mul(ed25519.NewScalar(*new(big.Int).Mod(numerator, ed25519.GROUP_ORDER)))
+				vi = vi.Mul(ed25519.BintToScalar(*new(big.Int).Mod(numerator, ed25519.GROUP_ORDER)))
 			}
 		}
-		vi.Invert()
+		vi = vi.Inverse()
 		codeword = append(codeword, vi.Mul(f.Eval(i)))
 	}
 	return codeword
@@ -566,10 +591,10 @@ func RandomCodeword(numNodes int, threshold int) Scalars {
 
 // LagrangeCoefficientScalar compute lagrange coefficints
 func LagrangeCoefficientScalar(i ed25519.Scalar, indices Scalars) ed25519.Scalar {
-	numerator := ed25519.NewScalar(*big.NewInt(1))
-	denominator := ed25519.NewScalar(*big.NewInt(1))
+	numerator := ed25519.BintToScalar(*big.NewInt(1))
+	denominator := ed25519.BintToScalar(*big.NewInt(1))
 	for j := 0; j < len(indices); j++ {
-		if indices[j].Not_equal(i) {
+		if !indices[j].Equal(i) {
 			numerator = numerator.Mul(indices[j])
 			denominator = denominator.Mul(indices[j].Sub(i))
 		}
