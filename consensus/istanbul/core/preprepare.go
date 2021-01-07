@@ -39,7 +39,6 @@ func (c *core) sendPreprepare(request *istanbul.Request) {
 			c.sendCommitment(c.forwardSeq)
 		}
 		if c.IsProposer() {
-			curView := c.currentView()
 			root := common.Hash{}
 			// checking whether the node already has the required data or not
 			if seq > c.startSeq {
@@ -83,13 +82,13 @@ func (c *core) sendPreprepare(request *istanbul.Request) {
 				c.leaderMu.RUnlock()
 				// go c.sendPrivateData(root)
 			}
-
+			view := c.currentView()
 			preprepare, err := Encode(&istanbul.Preprepare{
-				View:     curView,
+				View:     view,
 				Proposal: request.Proposal,
 			})
 			if err != nil {
-				logger.Error("Failed to encode", "view", curView)
+				logger.Error("Failed to encode", "view", view)
 				return
 			}
 			c.broadcast(&message{
@@ -102,7 +101,7 @@ func (c *core) sendPreprepare(request *istanbul.Request) {
 			if err != nil {
 				log.Error("Can't open sprptimef  file", "error", err)
 			}
-			fmt.Fprintln(sprptimef, curView.Sequence.Uint64(), root.Hex(), c.address.Hex(), c.Now())
+			fmt.Fprintln(sprptimef, view.Sequence.Uint64(), root.Hex(), c.address.Hex(), c.Now())
 			sprptimef.Close()
 		}
 	}
