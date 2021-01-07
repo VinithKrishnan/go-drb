@@ -28,8 +28,7 @@ import (
 )
 
 // sendReconstruct sends a reconstruction message for a particular view
-func (c *core) sendReconstruct(view *istanbul.View) {
-	seq := view.Sequence.Uint64()
+func (c *core) sendReconstruct(seq uint64) {
 	c.nodeMu.RLock()
 	aData, ok := c.nodeAggData[seq]
 	c.nodeMu.RUnlock()
@@ -41,11 +40,11 @@ func (c *core) sendReconstruct(view *istanbul.View) {
 		recData.Index = uint64(index)
 
 		reconstruct, err := Encode(&istanbul.Reconstruct{
-			View:    view,
+			Seq:     seq,
 			RecData: recData,
 		})
 		if err != nil {
-			log.Error("Failed to encode reconstruction message", "view", view)
+			log.Error("Failed to encode reconstruction message", "number", seq)
 			return
 		}
 		c.broadcast(&message{
@@ -70,7 +69,7 @@ func (c *core) handleReconstruct(msg *message, src istanbul.Validator) error {
 		return errFailedDecodeReconstruct
 	}
 
-	rSeq := rmsg.View.Sequence.Uint64()
+	rSeq := rmsg.Seq
 	// Beacon output already available, no need to process further
 	if _, rok := c.beacon[rSeq]; rok {
 		return errHandleReconstruct

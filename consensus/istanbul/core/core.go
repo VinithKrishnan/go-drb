@@ -294,7 +294,7 @@ func (c *core) IsCurrentProposal(blockHash common.Hash) bool {
 	return c.current != nil && c.current.pendingRequest != nil && c.current.pendingRequest.Proposal.Hash() == blockHash
 }
 
-func (c *core) commit(view *istanbul.View) {
+func (c *core) commit(seq uint64) {
 	c.setState(StateCommitted)
 
 	proposal := c.current.Proposal()
@@ -310,17 +310,16 @@ func (c *core) commit(view *istanbul.View) {
 			return
 		}
 
+		if seq > c.startSeq {
+			go c.sendReconstruct(seq)
+		}
 		fintime := c.logdir + "fintime"
 		fintimef, err := os.OpenFile(fintime, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 		if err != nil {
 			log.Error("Can't open fintimef  file", "error", err)
 		}
-		fmt.Fprintln(fintimef, view.Sequence.Uint64(), c.address.Hex(), proposal.RBRoot().Hex(), c.Now())
+		fmt.Fprintln(fintimef, seq, c.address.Hex(), proposal.RBRoot().Hex(), c.Now())
 		fintimef.Close()
-
-		if view.Sequence.Uint64() > c.startSeq {
-			go c.sendReconstruct(view)
-		}
 	}
 }
 
@@ -398,9 +397,9 @@ func (c *core) startNewRound(round *big.Int) {
 			r := &istanbul.Request{
 				Proposal: c.current.Proposal(), //c.current.Proposal would be the locked proposal by previous proposer, see updateRoundState
 			}
-			c.sendPreprepare(r)
+			go c.sendPreprepare(r)
 		} else if c.current.pendingRequest != nil {
-			c.sendPreprepare(c.current.pendingRequest)
+			go c.sendPreprepare(c.current.pendingRequest)
 		}
 	}
 	c.newRoundChangeTimer()

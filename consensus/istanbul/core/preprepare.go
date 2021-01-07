@@ -201,14 +201,6 @@ func (c *core) handleCommitment(msg *message, src istanbul.Validator) error {
 		return errInvalidCommitment
 	}
 
-	rcmtime := c.logdir + "rcmtime"
-	rcmtimef, err := os.OpenFile(rcmtime, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		log.Error("Can't open rcmtime  file", "error", err)
-	}
-	fmt.Fprintln(rcmtimef, c.current.Sequence().Uint64(), src.Address().Hex(), c.address.Hex(), c.Now())
-	rcmtimef.Close()
-
 	// Notifying send preprepare thread to propose
 	if aggregated := c.addCommitment(comm, src.Address()); aggregated {
 		select {
@@ -216,6 +208,13 @@ func (c *core) handleCommitment(msg *message, src istanbul.Validator) error {
 		default:
 		}
 	}
+	rcmtime := c.logdir + "rcmtime"
+	rcmtimef, err := os.OpenFile(rcmtime, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Error("Can't open rcmtime  file", "error", err)
+	}
+	fmt.Fprintln(rcmtimef, c.current.Sequence().Uint64(), src.Address().Hex(), c.address.Hex(), c.Now())
+	rcmtimef.Close()
 	return errHandleCommitment
 }
 

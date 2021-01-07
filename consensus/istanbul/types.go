@@ -106,7 +106,7 @@ type Preprepare struct {
 
 // Reconstruct for the reconstruction phase
 type Reconstruct struct {
-	View    *View
+	Seq     uint64
 	RecData crypto.RecData
 }
 
