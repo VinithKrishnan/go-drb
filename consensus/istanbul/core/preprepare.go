@@ -372,6 +372,7 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 	}
 
 	seq := preprepare.View.Sequence.Uint64()
+	round := preprepare.View.Round.Uint64()
 	if seq > c.startSeq {
 		root = preprepare.Proposal.RBRoot()
 		// Create a NodeData using the Preprepare message
@@ -449,7 +450,7 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 		} else {
 			if seq > c.startSeq {
 				// handling preprepare message asynchrnously
-				go c.handlePreprepareAsync(preprepare, root)
+				go c.handlePreprepareAsync(preprepare, root, seq, round)
 			} else {
 				c.acceptPreprepare(preprepare)
 				c.setState(StatePreprepared)
@@ -468,7 +469,7 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 	return nil
 }
 
-func (c *core) handlePreprepareAsync(preprepare *istanbul.Preprepare, root common.Hash) {
+func (c *core) handlePreprepareAsync(preprepare *istanbul.Preprepare, root common.Hash, seq, round uint64) {
 	// TODO(sourav): Check whether the private data sent by the leader corresponds
 	// to the content of the propsal. Important to handle leader failures after
 	// preprepare phase.
@@ -483,8 +484,15 @@ func (c *core) handlePreprepareAsync(preprepare *istanbul.Preprepare, root commo
 			// TODO(sourav): We can change this to a bool value indicating
 			// whether the leader sent correct data or not.
 			case croot := <-c.privDataCh:
+				cseq := preprepare.View.Sequence.Uint64()
+				cround := preprepare.View.Round.Uint64()
+				if seq < cseq || (seq == cseq && round < cround) {
+					return
+				}
 				if croot == root {
-					done = true
+					if cseq == seq && round == cround {
+						done = true
+					}
 				}
 			}
 			if done {
