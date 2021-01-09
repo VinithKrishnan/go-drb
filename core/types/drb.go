@@ -58,8 +58,8 @@ func StringToKey(strKey StringKey) Key {
 }
 
 // StringToPoint converts a string to ed25519.Point
-func StringToPoint(str string) ed25519.Point {
+func StringToPoint(str string) *ed25519.Point {
 	bPkey, _ := hex.DecodeString(str)
 	pkey, _ := ed25519.NewIdentityPoint().SetBytes(bPkey)
-	return *pkey
+	return pkey
 }

@@ -82,15 +82,16 @@ func PointG() ed25519.Point {
 
 // Polynomial is defined as a list of scalars
 type Polynomial struct {
-	coeffs []ed25519.Scalar
+	coeffs []*ed25519.Scalar
 }
 
 // Init Initializes polynomial with given coefficients
-func (p Polynomial) Init(s Scalars) {
-	copy(p.coeffs, s)
-}
+// func (p Polynomial) Init(s []*ed25519.Scalar) {
+// 	copy(p.coeffs, s)
+// }
 
-func BintToScalar(v big.Int) ed25519.Scalar {
+// BintToScalar returns scalar given a big integer
+func BintToScalar(v *big.Int) *ed25519.Scalar {
 	val := v.Bytes()
 	for i, j := 0, len(val)-1; i < j; i, j = i+1, j-1 { // reversal of bytes
 		val[i], val[j] = val[j], val[i]
@@ -99,55 +100,59 @@ func BintToScalar(v big.Int) ed25519.Scalar {
 		val = append(val, 0)
 	}
 	tempsc, _ := ed25519.NewScalar().SetCanonicalBytes(val)
-	return *tempsc
+	return tempsc
 }
 
 // Eval returns the polynomial evaluation point
-func (p Polynomial) Eval(arg int) ed25519.Scalar {
-	x := BintToScalar(*big.NewInt(int64(arg)))
-	result := ed25519.NewScalar().Add(&p.coeffs[0], ed25519.NewScalar().Multiply(&x, &p.coeffs[1]))
-	xPow := ed25519.NewScalar().Set(&x)
+func (p Polynomial) Eval(arg int) *ed25519.Scalar {
+	x := BintToScalar(big.NewInt(int64(arg)))
+	result := ed25519.NewScalar().Add(p.coeffs[0], ed25519.NewScalar().Multiply(x, p.coeffs[1]))
+	xPow := ed25519.NewScalar().Set(x)
 	for i := 2; i < len(p.coeffs); i++ {
-		xPow.Multiply(xPow, &x)
-		result.Add(result, ed25519.NewScalar().Multiply(&p.coeffs[i], xPow))
+		xPow.Multiply(xPow, x)
+		result.Add(result, ed25519.NewScalar().Multiply(p.coeffs[i], xPow))
 	}
-	return *result
+	return result
 }
 
 // Random returns a random scalar
-func Random() ed25519.Scalar {
+func Random() *ed25519.Scalar {
 	v, _ := rand.Int(rand.Reader, GROUP_ORDER)
-	return BintToScalar(*v)
+	return BintToScalar(v)
 }
 
 // RandomWithSecret returns a polynomial with random coefficients from Zq.
 // p(x) = c_0 + c_1*x + ... c_{degree} * x^{degree}
-func RandomWithSecret(degree int, secret ed25519.Scalar) Polynomial {
-	var coeffs []ed25519.Scalar
-	coeffs = append(coeffs, secret)
+func RandomWithSecret(degree int, secret *ed25519.Scalar) Polynomial {
+	var coeffs = make([]*ed25519.Scalar, degree+1)
+	coeffs[0] = ed25519.NewScalar().Set(secret)
+	// coeffs = append(coeffs, secret)
 	for i := 1; i <= degree; i++ {
-		coeffs = append(coeffs, Random())
+		coeffs[i] = Random()
+		// coeffs = append(coeffs, Random())
 	}
 	return Polynomial{coeffs}
 }
 
 // RandomPoly similar to above function . But randomly chooses secret Scalar parameter
 func RandomPoly(degree int) Polynomial {
-	var coeffs []ed25519.Scalar
+	var coeffs = make([]*ed25519.Scalar, degree+1)
 	for i := 0; i <= degree; i++ {
-		coeffs = append(coeffs, Random())
+		// coeffs = append(coeffs, Random())
+		coeffs[i] = Random()
 	}
 	return Polynomial{coeffs}
 }
 
 // KeyGen generates a fresh ed25519 keypair (sk, pk = h^sk) for a participant in the PVSS protocol
-func KeyGen() (ed25519.Scalar, ed25519.Point) {
+func KeyGen() (*ed25519.Scalar, *ed25519.Point) {
 	secretKey := Random()
-	publicKey := ed25519.NewIdentityPoint().ScalarMult(&secretKey, H)
-	return secretKey, *publicKey
+	publicKey := ed25519.NewIdentityPoint().ScalarMult(secretKey, H)
+	return secretKey, publicKey
 }
 
-func ShareRandomSecret(pubKeys Points, total, ths int, secret ed25519.Scalar) NodeData {
+// ShareRandomSecret secret shares a random data
+func ShareRandomSecret(pubKeys Points, total, ths int, secret *ed25519.Scalar) NodeData {
 	var (
 		shares      = make(Scalars, total)
 		commitments = make(Points, total)
@@ -158,10 +163,9 @@ func ShareRandomSecret(pubKeys Points, total, ths int, secret ed25519.Scalar) No
 	// computes commitments, encrypted shares for each party
 	for i := 1; i <= total; i++ {
 		share := poly.Eval(i)
-		// shares = append(shares, share)
-		shares[i-1] = *ed25519.NewScalar().Set(&share)
-		encEvals[i-1] = *ed25519.NewIdentityPoint().ScalarMult(&share, &pubKeys[i-1])
-		commitments[i-1] = *ed25519.NewIdentityPoint().ScalarMult(&share, &G)
+		shares[i-1] = *ed25519.NewScalar().Set(share)
+		encEvals[i-1] = *ed25519.NewIdentityPoint().ScalarMult(share, &pubKeys[i-1])
+		commitments[i-1] = *ed25519.NewIdentityPoint().ScalarMult(share, &G)
 	}
 	// generating proof for each party
 	proofs := ProveShareCorrectness(shares, commitments, encEvals, pubKeys)
@@ -273,10 +277,10 @@ func ProveShareCorrectness(shares Scalars, commits, encEvals Points, pubKeys Poi
 func DleqProve(g, h, x, y ed25519.Point, alpha ed25519.Scalar) (ed25519.Scalar, ed25519.Scalar) {
 	// w random element  from Zq
 	w := Random()
-	a1 := ed25519.NewIdentityPoint().ScalarMult(&w, &g)
-	a2 := ed25519.NewIdentityPoint().ScalarMult(&w, &h)
+	a1 := ed25519.NewIdentityPoint().ScalarMult(w, &g)
+	a2 := ed25519.NewIdentityPoint().ScalarMult(w, &h)
 	e := DleqDeriveChal(x, y, *a1, *a2)
-	z := ed25519.NewScalar().Subtract(&w, ed25519.NewScalar().Multiply(e, &alpha))
+	z := ed25519.NewScalar().Subtract(w, ed25519.NewScalar().Multiply(e, &alpha))
 	return *e, *z
 }
 
@@ -552,22 +556,24 @@ func ValidateRoundData(rData RoundData, root common.Hash) bool {
 
 // RecoverBeacon computes the beacon output
 // TODO(sourav): Optimize this!
-func RecoverBeacon(shares map[uint64]ed25519.Point, threshold int) ed25519.Point {
+func RecoverBeacon(shares map[uint64]*ed25519.Point, threshold int) ed25519.Point {
 	// initializing indeces
-	idxs := make([]ed25519.Scalar, threshold)
+	idxs := make([]*ed25519.Scalar, threshold)
 	i := 0
 	for idx := range shares {
-		idxs[i] = BintToScalar(*new(big.Int).SetUint64(idx + 1))
+		idxs[i] = BintToScalar(new(big.Int).SetUint64(idx + 1))
 		i++
 	}
 
-	var LagrangeCoefficients []*ed25519.Scalar
-	var lshares []*ed25519.Point
-	for idx := range shares {
-		point := shares[idx]
-		lc := LagrangeCoefficientScalar(BintToScalar(*new(big.Int).SetUint64(idx + 1)), idxs)
-		LagrangeCoefficients = append(LagrangeCoefficients, &lc)
-		lshares = append(lshares, &point)
+	var LagrangeCoefficients = make([]*ed25519.Scalar, threshold)
+	var lshares = make([]*ed25519.Point, threshold)
+	ii := 0
+	for idx, point := range shares {
+		// point := shares[idx]
+		lc := LagrangeCoefficientScalar(BintToScalar(new(big.Int).SetUint64(idx+1)), idxs)
+		LagrangeCoefficients[ii] = lc
+		lshares[ii] = point
+		ii++
 	}
 	return *ed25519.NewIdentityPoint().VarTimeMultiScalarMult(LagrangeCoefficients, lshares)
 }
@@ -577,34 +583,32 @@ func RandomCodeword(numNodes int, threshold int) []*ed25519.Scalar {
 	var codeword []*ed25519.Scalar
 	f := RandomPoly(numNodes - threshold - 1)
 	for i := 1; i <= numNodes; i++ {
-		vid := BintToScalar(*big.NewInt(1))
-		vi := &vid
+		vi := BintToScalar(big.NewInt(1))
+		// vi := &vid
 		for j := 1; j <= numNodes; j++ {
 			if j != i {
 				numerator := new(big.Int).Sub(big.NewInt(int64(i)), big.NewInt(int64(j)))
-				modNum := BintToScalar(*new(big.Int).Mod(numerator, GROUP_ORDER))
-				vi.Multiply(vi, &modNum)
+				modNum := BintToScalar(new(big.Int).Mod(numerator, GROUP_ORDER))
+				vi.Multiply(vi, modNum)
 			}
 		}
 		vi.Invert(vi)
 		feval := f.Eval(i)
-		codeword = append(codeword, vi.Multiply(vi, &feval))
+		codeword = append(codeword, vi.Multiply(vi, feval))
 	}
 	return codeword
 }
 
 // LagrangeCoefficientScalar compute lagrange coefficints
-func LagrangeCoefficientScalar(i ed25519.Scalar, indices []ed25519.Scalar) ed25519.Scalar {
-	danm := BintToScalar(*big.NewInt(1))
-	numerator := &danm
-	dadm := BintToScalar(*big.NewInt(1))
-	denominator := &dadm
+func LagrangeCoefficientScalar(i *ed25519.Scalar, indices []*ed25519.Scalar) *ed25519.Scalar {
+	numerator := BintToScalar(big.NewInt(1))
+	denominator := BintToScalar(big.NewInt(1))
 	for j := 0; j < len(indices); j++ {
 		idx := indices[j]
-		if idx.Equal(&i) != 1 {
-			numerator = ed25519.NewScalar().Multiply(numerator, &idx)
-			denominator = ed25519.NewScalar().Multiply(denominator, ed25519.NewScalar().Subtract(&idx, &i))
+		if idx.Equal(i) != 1 {
+			numerator.Multiply(numerator, idx)
+			denominator.Multiply(denominator, ed25519.NewScalar().Subtract(idx, i))
 		}
 	}
-	return *ed25519.NewScalar().Multiply(numerator, ed25519.NewScalar().Invert(denominator))
+	return numerator.Multiply(numerator, denominator.Invert(denominator))
 }

@@ -62,13 +62,13 @@ func New(backend istanbul.Backend, config *istanbul.Config) Engine {
 		local:              config.Local,
 		commitmentCh:       make(chan struct{}, 10),
 		privDataCh:         make(chan common.Hash, 10),
-		pubKeys:            make(map[common.Address]ed25519.Point),
+		pubKeys:            make(map[common.Address]*ed25519.Point),
 		addrIDMap:          make(map[common.Address]int),
 		idAddrMap:          make(map[int]common.Address),
 		nodeAggData:        make(map[uint64]*crypto.NodeData),
 		nodePrivData:       make(map[common.Hash]*crypto.RoundData),
-		nodeRecData:        make(map[uint64]map[uint64]ed25519.Point),
-		beacon:             make(map[uint64]ed25519.Point),
+		nodeRecData:        make(map[uint64]map[uint64]*ed25519.Point),
+		beacon:             make(map[uint64]*ed25519.Point),
 		penAggData:         make(map[common.Hash]*crypto.NodeData),
 		penIndexSets:       make(map[common.Hash][]common.Address),
 		penPrivData:        make(map[common.Hash]map[common.Address]*crypto.RoundData),
@@ -104,7 +104,7 @@ type core struct {
 
 	// drb data
 	edKey     types.Key // secret key of the node
-	pubKeys   map[common.Address]ed25519.Point
+	pubKeys   map[common.Address]*ed25519.Point
 	addrIDMap map[common.Address]int
 	idAddrMap map[int]common.Address
 
@@ -121,10 +121,10 @@ type core struct {
 	penPrivData  map[common.Hash]map[common.Address]*crypto.RoundData
 
 	// for other nodes
-	nodeAggData  map[uint64]*crypto.NodeData         // height: [agg. poly. commit; agg. enc]
-	nodePrivData map[common.Hash]*crypto.RoundData   // height: node's private data for aggregated commitment
-	nodeRecData  map[uint64]map[uint64]ed25519.Point // height: {index:share}
-	beacon       map[uint64]ed25519.Point            // height: beacon-output
+	nodeAggData  map[uint64]*crypto.NodeData          // height: [agg. poly. commit; agg. enc]
+	nodePrivData map[common.Hash]*crypto.RoundData    // height: node's private data for aggregated commitment
+	nodeRecData  map[uint64]map[uint64]*ed25519.Point // height: {index:share}
+	beacon       map[uint64]*ed25519.Point            // height: beacon-output
 
 	backend               istanbul.Backend
 	events                *event.TypeMuxSubscription
@@ -416,7 +416,7 @@ func (c *core) getPubKeys() []ed25519.Point {
 	)
 	for addr, key := range c.pubKeys {
 		index = c.addrIDMap[addr]
-		pubKeys[index] = key
+		pubKeys[index] = *key
 	}
 	return pubKeys
 }

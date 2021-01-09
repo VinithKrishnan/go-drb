@@ -87,7 +87,7 @@ func (c *core) handleReconstruct(msg *message, src istanbul.Validator) error {
 	rPkey := c.pubKeys[src.Address()]
 	encShare := aData.EncEvals[rIndex]
 
-	if !crypto.ValidateReconstruct(rPkey, encShare, recon.DecShare, recon.Proof) {
+	if !crypto.ValidateReconstruct(*rPkey, encShare, recon.DecShare, recon.Proof) {
 		log.Error("Invalid reconstruct message", "from", src.Address(), "index", rIndex)
 		return errInvalidReconstruct
 	}
@@ -98,14 +98,14 @@ func (c *core) handleReconstruct(msg *message, src istanbul.Validator) error {
 // addReconstruct adds a reconstruction message
 func (c *core) addReconstruct(seq, index uint64, share ed25519.Point) {
 	if _, ok := c.nodeRecData[seq]; !ok {
-		c.nodeRecData[seq] = make(map[uint64]ed25519.Point)
+		c.nodeRecData[seq] = make(map[uint64]*ed25519.Point)
 	}
-	c.nodeRecData[seq][index] = share
+	c.nodeRecData[seq][index] = &share
 	log.Debug("Added share for", "number", seq, "share", hex.EncodeToString(share.Bytes()), "from", index)
 
 	if len(c.nodeRecData[seq]) == c.threshold {
 		output := crypto.RecoverBeacon(c.nodeRecData[seq], c.threshold)
-		c.beacon[seq] = output
+		c.beacon[seq] = &output
 		log.Info("Beacon output for", "number", seq, "output", hex.EncodeToString(output.Bytes()))
 
 		// Logging handle prepare time
