@@ -31,7 +31,6 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/istanbul/validator"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -403,8 +402,8 @@ func (sb *backend) Prepare(chain consensus.ChainReader, header *types.Header) er
 	// DRB data
 	header.RBRoot = common.Hash{}
 	header.IndexSet = []byte{}
-	header.Commitments = crypto.Points{}
-	header.EncEvals = crypto.Points{}
+	header.Commitments = [][]byte{}
+	header.EncEvals = [][]byte{}
 
 	// set header's timestamp
 	// TODO(sourav): set header's timestamp as the current timestamp!

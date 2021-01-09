@@ -17,13 +17,17 @@
 package istanbul
 
 import (
+	// "encoding/hex"
 	"fmt"
 	"io"
 	"math/big"
 
+	ed25519 "github.com/ethereum/go-ethereum/filippo.io/edwards25519"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	// "github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
@@ -36,9 +40,9 @@ type Proposal interface {
 	Hash() common.Hash
 
 	RBRoot() common.Hash
-	Commitments() crypto.Points
-	EncEvals() crypto.Points
-	UpdateDRB([]byte, *crypto.NodeData)
+	Commitments() [][]byte
+	EncEvals() [][]byte
+	UpdateDRB([]byte, [][]byte, [][]byte, common.Hash)
 
 	EncodeRLP(w io.Writer) error
 
@@ -107,17 +111,202 @@ type Preprepare struct {
 // Reconstruct for the reconstruction phase
 type Reconstruct struct {
 	Seq     uint64
-	RecData crypto.RecData
+	RecData RecData
+}
+
+type NodeData struct {
+	Round    uint64
+	Root     common.Hash // Nil root indicates commitment phase poly. commitment
+	Points   [][]byte
+	EncEvals [][]byte
+	Proofs   []NizkProof
+}
+
+type RoundData struct {
+	Round    uint64
+	Root     common.Hash
+	IndexSet []common.Address
+	Proofs   []NizkProof
+}
+
+type RecData struct {
+	Index    uint64
+	DecShare []byte
+	Proof    NizkProof
+}
+
+type NizkProof struct {
+	Commit   []byte
+	EncEval  []byte
+	Chal     []byte
+	Response []byte
+}
+
+func PointsToBytes(points []ed25519.Point) [][]byte {
+	total := len(points)
+	var ipoints = make([][]byte, total)
+	for i := 0; i < total; i++ {
+		ipoints[i] = points[i].Bytes()
+	}
+	return ipoints
+}
+
+func BytesToPoints(ipoints [][]byte) []ed25519.Point {
+	total := len(ipoints)
+	var points = make([]ed25519.Point, total)
+	for i := 0; i < total; i++ {
+		point, _ := ed25519.NewIdentityPoint().SetBytes(ipoints[i])
+		points[i] = *point
+	}
+	return points
+}
+
+func RecDataEncode(recData crypto.RecData) RecData {
+	return RecData{
+		Index:    recData.Index,
+		DecShare: recData.DecShare.Bytes(),
+		Proof:    getIProof(recData.Proof),
+	}
+}
+
+func RecDataDecode(recData RecData) crypto.RecData {
+	decShare, _ := ed25519.NewIdentityPoint().SetBytes(recData.DecShare)
+	return crypto.RecData{
+		Index:    recData.Index,
+		DecShare: *decShare,
+		Proof:    getCProof(recData.Proof),
+	}
+}
+
+func RoundDataEncode(rData crypto.RoundData) RoundData {
+	proofs := rData.Proofs
+	total := len(proofs)
+	var iproofs = make([]NizkProof, total)
+	for i := 0; i < total; i++ {
+		iproofs[i] = getIProof(proofs[i])
+	}
+	return RoundData{
+		Round:    rData.Round,
+		Root:     rData.Root,
+		IndexSet: rData.IndexSet,
+		Proofs:   iproofs,
+	}
+}
+
+func RoundDataDecode(rData RoundData) crypto.RoundData {
+	iproofs := rData.Proofs
+	total := len(iproofs)
+	proofs := make([]crypto.NizkProof, total)
+	for i := 0; i < total; i++ {
+		proofs[i] = getCProof(iproofs[i])
+	}
+	return crypto.RoundData{
+		Round:    rData.Round,
+		Root:     rData.Root,
+		IndexSet: rData.IndexSet,
+		Proofs:   proofs,
+	}
+}
+
+func NodeDataEncode(nData crypto.NodeData) NodeData {
+	points := nData.Points
+	total := len(points)
+	encEvals := nData.EncEvals
+	proofs := nData.Proofs
+
+	var (
+		iPoints   = make([][]byte, total)
+		iEncEvals = make([][]byte, total)
+		iProofs   = make([]NizkProof, total)
+	)
+
+	for i := 0; i < total; i++ {
+		iPoints[i] = points[i].Bytes()
+		iEncEvals[i] = encEvals[i].Bytes()
+		iProofs[i] = getIProof(proofs[i])
+	}
+
+	return NodeData{
+		Round:    nData.Round,
+		Root:     nData.Root,
+		Points:   iPoints,
+		EncEvals: iEncEvals,
+		Proofs:   iProofs,
+	}
+	// for i := 0; i < total; i++ {
+	// 	log.Info("pcompare", "cp", hex.EncodeToString(points[i].Bytes()), "ip", hex.EncodeToString(iPoints[i]))
+	// 	log.Info("ccompare", "cc", hex.EncodeToString(encEvals[i].Bytes()), "ic", hex.EncodeToString(iEncEvals[i]))
+	// }
+}
+
+func getIProof(proof crypto.NizkProof) NizkProof {
+	return NizkProof{
+		Commit:   proof.Commit.Bytes(),
+		EncEval:  proof.EncEval.Bytes(),
+		Chal:     proof.Chal.Bytes(),
+		Response: proof.Response.Bytes(),
+	}
+	// log.Info("compar", "cp", hex.EncodeToString(proof.Commit.Bytes()), "ci", hex.EncodeToString(iproof.Commit))
+	// log.Info("compar", "ce", hex.EncodeToString(proof.EncEval.Bytes()), "ie", hex.EncodeToString(iproof.EncEval))
+	// log.Info("compar", "cc", hex.EncodeToString(proof.Chal.Bytes()), "ci", hex.EncodeToString(iproof.Chal))
+	// log.Info("compar", "cr", hex.EncodeToString(proof.Response.Bytes()), "ci", hex.EncodeToString(iproof.Response))
+}
+
+func getCProof(proof NizkProof) crypto.NizkProof {
+	commit, _ := ed25519.NewIdentityPoint().SetBytes(proof.Commit)
+	encEval, _ := ed25519.NewIdentityPoint().SetBytes(proof.EncEval)
+	chal, _ := ed25519.NewScalar().SetCanonicalBytes(proof.Chal)
+	resp, _ := ed25519.NewScalar().SetCanonicalBytes(proof.Response)
+	return crypto.NizkProof{
+		Commit:   *commit,
+		EncEval:  *encEval,
+		Chal:     *chal,
+		Response: *resp,
+	}
+}
+
+func NodeDataDecode(nData NodeData) crypto.NodeData {
+	points := nData.Points
+	total := len(points)
+	encEvals := nData.EncEvals
+	proofs := nData.Proofs
+
+	var (
+		cPoints   = make([]ed25519.Point, total)
+		cEncEvals = make([]ed25519.Point, total)
+		cProofs   = make([]crypto.NizkProof, total)
+	)
+
+	for i := 0; i < total; i++ {
+		cpoint, _ := ed25519.NewIdentityPoint().SetBytes(points[i])
+		cPoints[i] = *cpoint
+		enc, _ := ed25519.NewIdentityPoint().SetBytes(encEvals[i])
+		cEncEvals[i] = *enc
+		cProofs[i] = getCProof(proofs[i])
+	}
+
+	return crypto.NodeData{
+		Round:    nData.Round,
+		Root:     nData.Root,
+		Points:   cPoints,
+		EncEvals: cEncEvals,
+		Proofs:   cProofs,
+	}
+
+	// for i := 0; i < total; i++ {
+	// 	log.Info("dpcompare", "cp", hex.EncodeToString(cPoints[i].Bytes()), "ip", hex.EncodeToString(points[i]))
+	// 	log.Info("dccompare", "cc", hex.EncodeToString(cEncEvals[i].Bytes()), "ic", hex.EncodeToString(encEvals[i]))
+	// }
 }
 
 // Commitment is sent during the commitment phase
 type Commitment struct {
-	NData crypto.NodeData
+	NData NodeData
 }
 
 // PrivateData has the data a leader privately sends to a node
 type PrivateData struct {
-	RData crypto.RoundData
+	RData RoundData
 }
 
 // EncodeRLP serializes b into the Ethereum RLP format.

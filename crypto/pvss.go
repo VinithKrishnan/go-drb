@@ -1,18 +1,22 @@
 package crypto
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/binary"
 	"errors"
 	"math/big"
-	"reflect"
+
+	rnd "math/rand"
 
 	"github.com/ethereum/go-ethereum/common"
-	// "github.com/ethereum/go-ethereum/crypto/ed25519"
-	"ed25519"
+	ed25519 "github.com/ethereum/go-ethereum/filippo.io/edwards25519"
 	"github.com/ethereum/go-ethereum/log"
 )
+
+var TEMP, _ = new(big.Int).SetString("27742317777372353535851937790883648493", 10)
+var GROUP_ORDER = new(big.Int).Add(new(big.Int).Exp(big.NewInt(2), big.NewInt(252), nil), TEMP)
 
 var (
 	errInvalidSanityCheck = errors.New("sanity check failed")
@@ -56,20 +60,24 @@ type NizkProofs []NizkProof
 type Points []ed25519.Point
 type Scalars []ed25519.Scalar
 
-// Base points
 var (
-	G = PointG()
-	H = ed25519.B
+	ONE = ed25519.NewIdentityPoint()
+	G   = PointG()
+	H   = ed25519.NewGeneratorPoint()
 )
 
-// PointG computes the base point
 func PointG() ed25519.Point {
-
-	has := sha256.New()
-	has.Write(ed25519.B.Bytes())
-	bs := has.Sum(nil)
-	Pt:= ed25519.Point_from_uniform(bs)
-	return Pt
+	r := rnd.New(rnd.NewSource(int64(10)))
+	v := new(big.Int).Rand(r, GROUP_ORDER)
+	val := (*v).Bytes()
+	for i, j := 0, len(val)-1; i < j; i, j = i+1, j-1 { // reversal of bytes
+		val[i], val[j] = val[j], val[i]
+	}
+	for len(val) < 32 {
+		val = append(val, 0)
+	}
+	tempsc, _ := ed25519.NewScalar().SetCanonicalBytes(val)
+	return *ed25519.NewIdentityPoint().ScalarBaseMult(tempsc)
 }
 
 // Polynomial is defined as a list of scalars
@@ -82,67 +90,81 @@ func (p Polynomial) Init(s Scalars) {
 	copy(p.coeffs, s)
 }
 
-// Eval evaluates polynomial at arg and returns evaluation
-func (p Polynomial) Eval(arg int) ed25519.Scalar {
-
-	x := ed25519.BintToScalar(*big.NewInt(int64(arg)))
-	result := p.coeffs[0].Add(p.coeffs[1].Mul(x))
-	x_pow := x.Copy()
-	for i := 2; i < len(p.coeffs); i++ {
-		x_pow = x_pow.Mul(x)
-		result = result.Add(p.coeffs[i].Mul(x_pow))
+func BintToScalar(v big.Int) ed25519.Scalar {
+	val := v.Bytes()
+	for i, j := 0, len(val)-1; i < j; i, j = i+1, j-1 { // reversal of bytes
+		val[i], val[j] = val[j], val[i]
 	}
-	return result
+	for len(val) < 32 {
+		val = append(val, 0)
+	}
+	tempsc, _ := ed25519.NewScalar().SetCanonicalBytes(val)
+	return *tempsc
+}
+
+// Eval returns the polynomial evaluation point
+func (p Polynomial) Eval(arg int) ed25519.Scalar {
+	x := BintToScalar(*big.NewInt(int64(arg)))
+	result := ed25519.NewScalar().Add(&p.coeffs[0], ed25519.NewScalar().Multiply(&x, &p.coeffs[1]))
+	xPow := ed25519.NewScalar().Set(&x)
+	for i := 2; i < len(p.coeffs); i++ {
+		xPow.Multiply(xPow, &x)
+		result.Add(result, ed25519.NewScalar().Multiply(&p.coeffs[i], xPow))
+	}
+	return *result
+}
+
+// Random returns a random scalar
+func Random() ed25519.Scalar {
+	v, _ := rand.Int(rand.Reader, GROUP_ORDER)
+	return BintToScalar(*v)
 }
 
 // RandomWithSecret returns a polynomial with random coefficients from Zq.
 // p(x) = c_0 + c_1*x + ... c_{degree} * x^{degree}
 func RandomWithSecret(degree int, secret ed25519.Scalar) Polynomial {
-
 	var coeffs []ed25519.Scalar
 	coeffs = append(coeffs, secret)
 	for i := 1; i <= degree; i++ {
-		coeffs = append(coeffs, ed25519.Random())
+		coeffs = append(coeffs, Random())
 	}
 	return Polynomial{coeffs}
 }
 
-// Random similar to above function . But randomly chooses secret Scalar parameter
-func Random(degree int) Polynomial {
-
+// RandomPoly similar to above function . But randomly chooses secret Scalar parameter
+func RandomPoly(degree int) Polynomial {
 	var coeffs []ed25519.Scalar
 	for i := 0; i <= degree; i++ {
-		coeffs = append(coeffs, ed25519.Random())
+		coeffs = append(coeffs, Random())
 	}
 	return Polynomial{coeffs}
 }
 
 // KeyGen generates a fresh ed25519 keypair (sk, pk = h^sk) for a participant in the PVSS protocol
 func KeyGen() (ed25519.Scalar, ed25519.Point) {
-	secretKey := ed25519.Random()
-	publicKey := H.Mul(secretKey)
-	return secretKey, publicKey
+	secretKey := Random()
+	publicKey := ed25519.NewIdentityPoint().ScalarMult(&secretKey, H)
+	return secretKey, *publicKey
 }
 
-// ShareRandomSecret Use this function to send message to leader in Commitment phase
-// generate a fresh random base secret s (or uses the provided one)
-func ShareRandomSecret(rcvPublicKeys Points, total, ths int, secret ed25519.Scalar) NodeData {
+func ShareRandomSecret(pubKeys Points, total, ths int, secret ed25519.Scalar) NodeData {
 	var (
-		shares      Scalars
-		commitments Points
-		encEvals    Points
+		shares      = make(Scalars, total)
+		commitments = make(Points, total)
+		encEvals    = make(Points, total)
 	)
 	// creates a random polynomial
 	poly := RandomWithSecret(ths-1, secret)
 	// computes commitments, encrypted shares for each party
 	for i := 1; i <= total; i++ {
 		share := poly.Eval(i)
-		shares = append(shares, share)
-		encEvals = append(encEvals, rcvPublicKeys[i-1].Mul(share))
-		commitments = append(commitments, G.Mul(share))
+		// shares = append(shares, share)
+		shares[i-1] = *ed25519.NewScalar().Set(&share)
+		encEvals[i-1] = *ed25519.NewIdentityPoint().ScalarMult(&share, &pubKeys[i-1])
+		commitments[i-1] = *ed25519.NewIdentityPoint().ScalarMult(&share, &G)
 	}
 	// generating proof for each party
-	proofs := ProveShareCorrectness(shares, commitments, encEvals, rcvPublicKeys)
+	proofs := ProveShareCorrectness(shares, commitments, encEvals, pubKeys)
 	return NodeData{
 		Points:   commitments,
 		EncEvals: encEvals,
@@ -153,7 +175,7 @@ func ShareRandomSecret(rcvPublicKeys Points, total, ths int, secret ed25519.Scal
 // ReconstructData returns the data for the reconstruction phase
 func ReconstructData(commit, enc, pkey ed25519.Point, skey ed25519.Scalar) RecData {
 	dec := DecryptShare(enc, skey)
-	chal, res := DleqProve(H, dec, pkey, enc, skey)
+	chal, res := DleqProve(*H, dec, pkey, enc, skey)
 	return RecData{
 		DecShare: dec,
 		Proof: NizkProof{
@@ -167,21 +189,24 @@ func ReconstructData(commit, enc, pkey ed25519.Point, skey ed25519.Scalar) RecDa
 
 // DecryptShare encryptedshare * secret_key.inverse()
 func DecryptShare(share ed25519.Point, secretKey ed25519.Scalar) ed25519.Point {
-	return share.Mul(secretKey.Inverse())
+	return *ed25519.NewIdentityPoint().ScalarMult(ed25519.NewScalar().Invert(&secretKey), &share)
 }
 
-// DleqVerify performs a the verification procedure of DLEQ NIZK protocol for the
-// given values g, x, h, y the (common) challenge e and the response z.
+// DleqVerify verifies a sequene of discrete logarithms
 func DleqVerify(numProofs int, proofs NizkProofs, h Points) bool {
 	for i := 0; i < numProofs; i++ {
 		// each proof contains (Commit, EncEval, Chal, Response)
 		proof := proofs[i]
-		a1 := G.Mul(proof.Response).Add(proof.Commit.Mul(proof.Chal))
-		a2 := h[i].Mul(proof.Response).Add(proof.EncEval.Mul(proof.Chal))
-		eLocal := DleqDeriveChal(proof.Commit, proof.EncEval, a1, a2)
-		// log.Info("Verify, Deriving challenge", "i", i, "pk", h[i], "a1", a1, "a2", a2)
-		// checking for equality of challenges
-		if !reflect.DeepEqual(proof.Chal, eLocal) {
+		temp11 := ed25519.NewIdentityPoint().ScalarMult(&proof.Chal, &proof.Commit)
+		a1 := ed25519.NewIdentityPoint().ScalarMult(&proof.Response, &G)
+		a1.Add(temp11, a1)
+
+		temp21 := ed25519.NewIdentityPoint().ScalarMult(&proof.Chal, &proof.EncEval)
+		a2 := ed25519.NewIdentityPoint().ScalarMult(&proof.Response, &h[i])
+		a2.Add(temp21, a2)
+
+		eLocal := DleqDeriveChal(proof.Commit, proof.EncEval, *a1, *a2)
+		if eLocal.Equal(&proof.Chal) != 1 {
 			return false
 		}
 	}
@@ -189,38 +214,38 @@ func DleqVerify(numProofs int, proofs NizkProofs, h Points) bool {
 }
 
 // DleqBatchVerify same as DleqVerify except a single chal is computed for the entire challenge
-func DleqBatchVerify(g Points, h Points, x Points, y Points, e ed25519.Scalar, z Scalars) bool {
-	n := len(g)
-	if n != len(x) || n != len(h) || n != len(y) || n != len(z) {
-		panic("Lenghts are not equal(DLEQ Verify)!")
-	}
-	var a1 Points
-	for i := 0; i < n; i++ {
-		a1 = append(a1, g[i].Mul(z[i]).Add(x[i].Mul(e)))
-	}
-	var a2 Points
-	for i := 0; i < n; i++ {
-		a2 = append(a2, h[i].Mul(z[i]).Add(y[i].Mul(e)))
-	}
-	eLocal := DleqDeriveBatchChal(x, y, a1, a2)
-	return reflect.DeepEqual(e, eLocal)
-}
+// func DleqBatchVerify(g Points, h Points, x Points, y Points, e ed25519.Scalar, z Scalars) bool {
+// 	n := len(g)
+// 	if n != len(x) || n != len(h) || n != len(y) || n != len(z) {
+// 		panic("Lenghts are not equal(DLEQ Verify)!")
+// 	}
+// 	var a1 Points
+// 	for i := 0; i < n; i++ {
+// 		a1 = append(a1, g[i].Mul(z[i]).Add(x[i].Mul(e)))
+// 	}
+// 	var a2 Points
+// 	for i := 0; i < n; i++ {
+// 		a2 = append(a2, h[i].Mul(z[i]).Add(y[i].Mul(e)))
+// 	}
+// 	eLocal := DleqDeriveBatchChal(x, y, a1, a2)
+// 	return reflect.DeepEqual(e, eLocal)
+// }
 
 // DleqDeriveBatchChal computes the challenge using the entire batch
-func DleqDeriveBatchChal(x Points, y Points, a1 Points, a2 Points) ed25519.Scalar {
-	n := len(x)
-	var bytestring []byte
-	for i := 0; i < n; i++ {
-		bytestring = append(bytestring, x[i].Bytes()...)
-		bytestring = append(bytestring, y[i].Bytes()...)
-		bytestring = append(bytestring, a1[i].Bytes()...)
-		bytestring = append(bytestring, a2[i].Bytes()...)
-	}
-	hash := sha512.New()
-	hash.Write(bytestring)
-	bs := hash.Sum(nil)
-	return ed25519.ScalarReduce(bs)
-}
+// func DleqDeriveBatchChal(x Points, y Points, a1 Points, a2 Points) ed25519.Scalar {
+// 	n := len(x)
+// 	var bytestring []byte
+// 	for i := 0; i < n; i++ {
+// 		bytestring = append(bytestring, x[i].Bytes()...)
+// 		bytestring = append(bytestring, y[i].Bytes()...)
+// 		bytestring = append(bytestring, a1[i].Bytes()...)
+// 		bytestring = append(bytestring, a2[i].Bytes()...)
+// 	}
+// 	hash := sha512.New()
+// 	hash.Write(bytestring)
+// 	bs := hash.Sum(nil)
+// 	return ed25519.ScalarReduce(bs)
+// }
 
 // ProveShareCorrectness returns commitments to the shares and a NIZK proof
 // (DLEQ) proofing that the encrypted_shares are correctly derived.
@@ -230,7 +255,6 @@ func ProveShareCorrectness(shares Scalars, commits, encEvals Points, pubKeys Poi
 	if n != len(commits) || n != len(pubKeys) || n != len(encEvals) {
 		panic("Lengths not equal!")
 	}
-
 	// Compute proof of each node
 	var proofs NizkProofs
 	for j := 0; j < n; j++ {
@@ -246,19 +270,18 @@ func ProveShareCorrectness(shares Scalars, commits, encEvals Points, pubKeys Poi
 }
 
 // DleqProve proves equality of discrete log for a single tuple
-func DleqProve(g ed25519.Point, h ed25519.Point, x ed25519.Point, y ed25519.Point, alpha ed25519.Scalar) (ed25519.Scalar, ed25519.Scalar) {
+func DleqProve(g, h, x, y ed25519.Point, alpha ed25519.Scalar) (ed25519.Scalar, ed25519.Scalar) {
 	// w random element  from Zq
-	w := ed25519.Random()
-	a1 := g.Mul(w)
-	a2 := h.Mul(w)
-	e := DleqDeriveChal(x, y, a1, a2)
-	// log.Info("Prove, Deriving challenge", "pk", h, "a1", a1, "a2", a2)
-	z := w.Sub(alpha.Mul(e))
-	return e, z
+	w := Random()
+	a1 := ed25519.NewIdentityPoint().ScalarMult(&w, &g)
+	a2 := ed25519.NewIdentityPoint().ScalarMult(&w, &h)
+	e := DleqDeriveChal(x, y, *a1, *a2)
+	z := ed25519.NewScalar().Subtract(&w, ed25519.NewScalar().Multiply(e, &alpha))
+	return *e, *z
 }
 
 // DleqDeriveChal computes the dleq challenge
-func DleqDeriveChal(x ed25519.Point, y ed25519.Point, a1 ed25519.Point, a2 ed25519.Point) ed25519.Scalar {
+func DleqDeriveChal(x, y, a1, a2 ed25519.Point) *ed25519.Scalar {
 	var bytestring []byte
 	bytestring = append(bytestring, x.Bytes()...)
 	bytestring = append(bytestring, y.Bytes()...)
@@ -268,62 +291,67 @@ func DleqDeriveChal(x ed25519.Point, y ed25519.Point, a1 ed25519.Point, a2 ed255
 	hash := sha512.New()
 	hash.Write(bytestring)
 	bs := hash.Sum(nil)
-	return ed25519.ScalarReduce(bs)
+	return ScalarReduce(bs)
+}
+
+// ScalarReduce reduces a 512 hash output into a scalar
+func ScalarReduce(data []byte) *ed25519.Scalar {
+	return ed25519.NewScalar().SetUniformBytes(data)
 }
 
 // ProveShareCorrectnessBatch uses a batched challenge
-func ProveShareCorrectnessBatch(shares Scalars, commits, encEvals Points, pubKeys Points) NizkProofs {
-	n := len(shares)
-	if n != len(commits) || n != len(pubKeys) || n != len(encEvals) {
-		panic("Lengths not equal!")
-	}
+// func ProveShareCorrectnessBatch(shares Scalars, commits, encEvals Points, pubKeys Points) NizkProofs {
+// 	n := len(shares)
+// 	if n != len(commits) || n != len(pubKeys) || n != len(encEvals) {
+// 		panic("Lengths not equal!")
+// 	}
 
-	var (
-		gArray Points
-		proofs NizkProofs
-	)
-	for j := 0; j < n; j++ {
-		gArray = append(gArray, G)
-	}
-	// computing the nizk challenge
-	chal, responses := DleqBatchProve(gArray, pubKeys, commits, encEvals, shares)
-	// initializing proofs
-	for j := 0; j < n; j++ {
-		proofs = append(proofs, NizkProof{
-			Commit:   commits[j],
-			EncEval:  encEvals[j],
-			Chal:     chal,
-			Response: responses[j],
-		})
-	}
-	return proofs
-}
+// 	var (
+// 		gArray Points
+// 		proofs NizkProofs
+// 	)
+// 	for j := 0; j < n; j++ {
+// 		gArray = append(gArray, G)
+// 	}
+// 	// computing the nizk challenge
+// 	chal, responses := DleqBatchProve(gArray, pubKeys, commits, encEvals, shares)
+// 	// initializing proofs
+// 	for j := 0; j < n; j++ {
+// 		proofs = append(proofs, NizkProof{
+// 			Commit:   commits[j],
+// 			EncEval:  encEvals[j],
+// 			Chal:     chal,
+// 			Response: responses[j],
+// 		})
+// 	}
+// 	return proofs
+// }
 
 // DleqBatchProve computes the challenges using the entire batch
-func DleqBatchProve(g []ed25519.Point, h []ed25519.Point, x []ed25519.Point, y []ed25519.Point, alpha Scalars) (ed25519.Scalar, Scalars) {
-	n := len(g)
-	if n != len(x) || n != len(h) || n != len(y) || n != len(alpha) {
-		panic("Lenghts are not equal!")
-	}
-	var w Scalars // w random element  from Zq
-	for i := 0; i < n; i++ {
-		w = append(w, ed25519.Random())
-	}
-	var a1 Points // a1 = g^w
-	for i := 0; i < n; i++ {
-		a1 = append(a1, g[i].Mul(w[i]))
-	}
-	var a2 Points // a2 = h^w
-	for i := 0; i < n; i++ {
-		a2 = append(a2, h[i].Mul(w[i]))
-	}
-	e := DleqDeriveBatchChal(x, y, a1, a2) // the challenge e
-	var z Scalars
-	for i := 0; i < n; i++ {
-		z = append(z, w[i].Sub(alpha[i].Mul(e)))
-	}
-	return e, z
-}
+// func DleqBatchProve(g []ed25519.Point, h []ed25519.Point, x []ed25519.Point, y []ed25519.Point, alpha Scalars) (ed25519.Scalar, Scalars) {
+// 	n := len(g)
+// 	if n != len(x) || n != len(h) || n != len(y) || n != len(alpha) {
+// 		panic("Lenghts are not equal!")
+// 	}
+// 	var w Scalars // w random element  from Zq
+// 	for i := 0; i < n; i++ {
+// 		w = append(w, ed25519.Random())
+// 	}
+// 	var a1 Points // a1 = g^w
+// 	for i := 0; i < n; i++ {
+// 		a1 = append(a1, g[i].Mul(w[i]))
+// 	}
+// 	var a2 Points // a2 = h^w
+// 	for i := 0; i < n; i++ {
+// 		a2 = append(a2, h[i].Mul(w[i]))
+// 	}
+// 	e := DleqDeriveBatchChal(x, y, a1, a2) // the challenge e
+// 	var z Scalars
+// 	for i := 0; i < n; i++ {
+// 		z = append(z, w[i].Sub(alpha[i].Mul(e)))
+// 	}
+// 	return e, z
+// }
 
 // VerifyShares verify that the given encrypted shares are computed accoring to the protocol.
 // Returns True if the encrypted shares are valid.
@@ -334,24 +362,18 @@ func VerifyShares(proofs NizkProofs, pubKeys Points, total, ths int) bool {
 		log.Error("Incorrect nizk proofs")
 		return false
 	}
-
 	// 1. verify the DLEQ NIZK proof
 	if !DleqVerify(numProofs, proofs, pubKeys) {
 		return false
 	}
-
 	// 2. verify the validity of the shares by sampling and testing with a random codeword
 	codeword := RandomCodeword(total, ths)
-	// product := proofs[0].Commit.Mul(codeword[0])
-	// for i := 1; i < total; i++ {
-	// 	product = product.Add(proofs[i].Commit.Mul(codeword[i]))
-	// }
-	var commitments []ed25519.Point
-	for i := 1; i< total;i++ {
-		commitments = append(commitments,proofs[i].Commit)
+	var commitments = make([]*ed25519.Point, total)
+	for i := 1; i < total; i++ {
+		commitments[i] = ed25519.NewIdentityPoint().Set(&proofs[i].Commit)
 	}
-	product := ed25519.MSM(codeword,commitments)
-	return product.Equal(ed25519.ONE)
+	product := ed25519.NewIdentityPoint().VarTimeMultiScalarMult(codeword, commitments)
+	return product.Equal(ONE) == 1
 }
 
 // AggregateCommit aggregates polynomial commitment
@@ -409,21 +431,16 @@ func sanityRoundData(rdata *RoundData, smrRoot common.Hash, ths int) bool {
 	return true
 }
 
-// validatePCommit validates the polynomial commitment using a random
-// codeword
+// validatePCommit validates the polynomial commitment using a random codeword
 func validatePCommit(commitments Points, numNodes, threshold int) bool {
 	codeword := RandomCodeword(numNodes, threshold)
-	// product := commitments[0].Mul(codeword[0])
-	// for i := 1; i < numNodes; i++ {
-	// 	product = product.Add(commitments[i].Mul(codeword[i]))
-	// }
-	product := ed25519.MSM(codeword,commitments)
-	return product.Equal(ed25519.ONE)
-}
-
-// ValidateNIZK checks for correctness of zk proof in the aggregate
-func validateNIZK(aggr NodeData) bool {
-	return false
+	var lcoms = make([]*ed25519.Point, numNodes)
+	for i := 0; i < numNodes; i++ {
+		commitment := commitments[i]
+		lcoms[i] = &commitment
+	}
+	product := ed25519.NewIdentityPoint().VarTimeMultiScalarMult(codeword, lcoms)
+	return product.Equal(ONE) == 1
 }
 
 // aggrMerkleRoot computes the merkleroot of aggregate
@@ -448,12 +465,6 @@ func aggrMerkleRoot(isets []int, commits, encEvals Points) common.Hash {
 	return common.BytesToHash(bs)
 }
 
-// MerkleRoot computes the merkle root of a tree
-// TODO(sourav): Implement this function
-func MerkleRoot(data []byte) common.Hash {
-	return common.Hash{}
-}
-
 // ValidateCommit checks for correctness of a aggregated message
 func ValidateCommit(aggr bool, com *NodeData, pubKeys Points, total, ths int) error {
 	// check basic sanity such as length
@@ -474,13 +485,19 @@ func ValidateCommit(aggr bool, com *NodeData, pubKeys Points, total, ths int) er
 // ValidateReconstruct whether a received reconstruction message is valid or not
 func ValidateReconstruct(pkey, encshare, share ed25519.Point, proof NizkProof) bool {
 	// Using values from the output of the SMR
-	a1 := H.Mul(proof.Response).Add(pkey.Mul(proof.Chal))
-	a2 := share.Mul(proof.Response).Add(encshare.Mul(proof.Chal))
-	eLocal := DleqDeriveChal(pkey, encshare, a1, a2)
-	if !reflect.DeepEqual(proof.Chal, eLocal) {
-		return false
+	temp11 := ed25519.NewIdentityPoint().ScalarMult(&proof.Chal, &pkey)
+	temp12 := ed25519.NewIdentityPoint().ScalarMult(&proof.Response, H)
+	a1 := temp11.Add(temp11, temp12)
+
+	temp21 := ed25519.NewIdentityPoint().ScalarMult(&proof.Chal, &encshare)
+	temp22 := ed25519.NewIdentityPoint().ScalarMult(&proof.Response, &share)
+	a2 := temp21.Add(temp21, temp22)
+
+	eLocal := DleqDeriveChal(pkey, encshare, *a1, *a2)
+	if eLocal.Equal(&proof.Chal) == 1 {
+		return true
 	}
-	return true
+	return false
 }
 
 // ValidatePrivData validates the private data sent by the leaer
@@ -491,10 +508,6 @@ func ValidatePrivData(rData RoundData, root common.Hash) error {
 
 // ValidateRoundData validates private messages received from leader
 func ValidateRoundData(rData RoundData, root common.Hash) bool {
-	// check for correct formation of the MerkleRoot
-	// if rData.Root != aggrMerkleRoot(rData) {
-	// 	return false
-	// }
 	return true
 }
 
@@ -503,92 +516,95 @@ func ValidateRoundData(rData RoundData, root common.Hash) bool {
 //  other t-sized subset of {v_1, ..., v_n}. This is possible as the commitments
 // 	v_1, ... v_n are all public information after the secret has been shared.
 // 2. Use the fact v_0 = g^p(0) = g^s to verify that the given secret s is valid.
-func VerifySecret(secret ed25519.Scalar, commitments []ed25519.Point, threshold int) bool {
-	v0 := Recover(commitments, threshold)
-	return v0.Equal(G.Mul(secret))
-}
+// func VerifySecret(secret ed25519.Scalar, commitments []ed25519.Point, threshold int) bool {
+// 	v0 := Recover(commitments, threshold)
+// 	return v0.Equal(G.Mul(secret))
+// }
+// func VerifySecret(secret *ed25519.Scalar, commitments Points, threshold int) bool {
+// 	v0 := Recover(commitments, threshold)
+// 	// return v0.Equal(G.Mul(secret))
+// 	return v0.Equal(ed25519.NewGeneratorPoint().ScalarMult(secret, G)) == 1
+// }
 
 // Recover takes EXACTLY t (idx, share) tuples and performs Langrange interpolation
 // to recover the secret S. The validity of the decrypted shares has to be verified
 // prior to a call of this function.
-func Recover(shares Points, threshold int) ed25519.Point {
-	var idxs Scalars
-	for i := 1; i <= threshold; i++ {
-		idxs = append(idxs, ed25519.BintToScalar(*big.NewInt(int64(i))))
-	}
+// func Recover(shares Points, threshold int) ed25519.Point {
+// 	var idxs Scalars
+// 	for i := 1; i <= threshold; i++ {
+// 		idxs = append(idxs, ed25519.BintToScalar(*big.NewInt(int64(i))))
+// 	}
 
-	// rec := ed25519.B // initialing it, will be subtracted later
+// 	// rec := ed25519.B // initialing it, will be subtracted later
 
-	var LagrangeCoefficients []ed25519.Scalar
-	var Shares []ed25519.Point
-	for idx := 0; idx < threshold; idx++ {
-		// t := LagrangeCoefficientScalar(ed25519.BintToScalar(*big.NewInt(int64(idx + 1))), idxs)
-		// a := shares[idx].Mul(t)
-		// rec = rec.Add(a)
-		LagrangeCoefficients = append(LagrangeCoefficients,LagrangeCoefficientScalar(ed25519.BintToScalar(*big.NewInt(int64(idx + 1))), idxs))
-		Shares = append(Shares,shares[idx])
-	}
-	rec := ed25519.MSM(LagrangeCoefficients,Shares)
-	return rec
-}
+// 	var LagrangeCoefficients []ed25519.Scalar
+// 	var Shares []ed25519.Point
+// 	for idx := 0; idx < threshold; idx++ {
+// 		// t := LagrangeCoefficientScalar(ed25519.BintToScalar(*big.NewInt(int64(idx + 1))), idxs)
+// 		// a := shares[idx].Mul(t)
+// 		// rec = rec.Add(a)
+// 		LagrangeCoefficients = append(LagrangeCoefficients, LagrangeCoefficientScalar(BintToScalar(*big.NewInt(int64(idx + 1))), idxs))
+// 		Shares = append(Shares, shares[idx])
+// 	}
+// 	rec := ed25519.MSM(LagrangeCoefficients, Shares)
+// 	return rec
+// }
 
 // RecoverBeacon computes the beacon output
 // TODO(sourav): Optimize this!
 func RecoverBeacon(shares map[uint64]ed25519.Point, threshold int) ed25519.Point {
 	// initializing indeces
-	idxs := make(Scalars, threshold)
+	idxs := make([]ed25519.Scalar, threshold)
 	i := 0
 	for idx := range shares {
-		idxs[i] = ed25519.BintToScalar(*new(big.Int).SetUint64(idx + 1))
+		idxs[i] = BintToScalar(*new(big.Int).SetUint64(idx + 1))
 		i++
 	}
 
-	// Interpolating the beacon output
-	// rec := ed25519.B
-	var LagrangeCoefficients []ed25519.Scalar
-	var Shares []ed25519.Point
-	for idx, point := range shares {
-		// sIdx := ed25519.BintToScalar(*new(big.Int).SetUint64(idx + 1))
-		// t := LagrangeCoefficientScalar(sIdx, idxs)
-		// a := point.Mul(t)
-		// rec = rec.Add(a)
-
-		LagrangeCoefficients = append(LagrangeCoefficients,LagrangeCoefficientScalar(ed25519.BintToScalar(*big.NewInt(int64(idx + 1))), idxs))
-		Shares = append(Shares,point)
+	var LagrangeCoefficients []*ed25519.Scalar
+	var lshares []*ed25519.Point
+	for idx := range shares {
+		point := shares[idx]
+		lc := LagrangeCoefficientScalar(BintToScalar(*new(big.Int).SetUint64(idx + 1)), idxs)
+		LagrangeCoefficients = append(LagrangeCoefficients, &lc)
+		lshares = append(lshares, &point)
 	}
-	rec := ed25519.MSM(LagrangeCoefficients,Shares)
-	return rec
-
-	// return rec.Sub(ed25519.B)
+	return *ed25519.NewIdentityPoint().VarTimeMultiScalarMult(LagrangeCoefficients, lshares)
 }
 
 // RandomCodeword returns a random dual code
-func RandomCodeword(numNodes int, threshold int) Scalars {
-	var codeword Scalars
-	f := Random(numNodes - threshold - 1)
+func RandomCodeword(numNodes int, threshold int) []*ed25519.Scalar {
+	var codeword []*ed25519.Scalar
+	f := RandomPoly(numNodes - threshold - 1)
 	for i := 1; i <= numNodes; i++ {
-		vi := ed25519.BintToScalar(*big.NewInt(1))
+		vid := BintToScalar(*big.NewInt(1))
+		vi := &vid
 		for j := 1; j <= numNodes; j++ {
 			if j != i {
 				numerator := new(big.Int).Sub(big.NewInt(int64(i)), big.NewInt(int64(j)))
-				vi = vi.Mul(ed25519.BintToScalar(*new(big.Int).Mod(numerator, ed25519.GROUP_ORDER)))
+				modNum := BintToScalar(*new(big.Int).Mod(numerator, GROUP_ORDER))
+				vi.Multiply(vi, &modNum)
 			}
 		}
-		vi = vi.Inverse()
-		codeword = append(codeword, vi.Mul(f.Eval(i)))
+		vi.Invert(vi)
+		feval := f.Eval(i)
+		codeword = append(codeword, vi.Multiply(vi, &feval))
 	}
 	return codeword
 }
 
 // LagrangeCoefficientScalar compute lagrange coefficints
-func LagrangeCoefficientScalar(i ed25519.Scalar, indices Scalars) ed25519.Scalar {
-	numerator := ed25519.BintToScalar(*big.NewInt(1))
-	denominator := ed25519.BintToScalar(*big.NewInt(1))
+func LagrangeCoefficientScalar(i ed25519.Scalar, indices []ed25519.Scalar) ed25519.Scalar {
+	danm := BintToScalar(*big.NewInt(1))
+	numerator := &danm
+	dadm := BintToScalar(*big.NewInt(1))
+	denominator := &dadm
 	for j := 0; j < len(indices); j++ {
-		if !indices[j].Equal(i) {
-			numerator = numerator.Mul(indices[j])
-			denominator = denominator.Mul(indices[j].Sub(i))
+		idx := indices[j]
+		if idx.Equal(&i) != 1 {
+			numerator = ed25519.NewScalar().Multiply(numerator, &idx)
+			denominator = ed25519.NewScalar().Multiply(denominator, ed25519.NewScalar().Subtract(&idx, &i))
 		}
 	}
-	return numerator.Div(denominator)
+	return *ed25519.NewScalar().Multiply(numerator, ed25519.NewScalar().Invert(denominator))
 }

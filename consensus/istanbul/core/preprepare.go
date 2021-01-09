@@ -17,6 +17,7 @@
 package core
 
 import (
+	// "encoding/hex"
 	"fmt"
 	"os"
 	"time"
@@ -25,7 +26,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/istanbul"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/crypto/ed25519"
+	// "github.com/ethereum/go-ethereum/crypto/ed25519"
 	"github.com/ethereum/go-ethereum/log"
 )
 
@@ -77,7 +78,11 @@ func (c *core) sendPreprepare(request *istanbul.Request) {
 				root = c.penRoots[0]
 				cData := c.penAggData[root]
 				bisets := c.getByteIndexSets(c.penIndexSets[root])
-				request.Proposal.UpdateDRB(bisets, cData)
+
+				commits := istanbul.PointsToBytes(cData.Points)
+				encEvals := istanbul.PointsToBytes(cData.EncEvals)
+				request.Proposal.UpdateDRB(bisets, commits, encEvals, cData.Root)
+
 				c.penRoots = c.penRoots[1:] // deleting pending root
 				c.leaderMu.RUnlock()
 				// go c.sendPrivateData(root)
@@ -137,8 +142,9 @@ func (c *core) sendPrivateData(root common.Hash) {
 
 // sendPrivateDataNode sends private data to a individual node
 func (c *core) sendPrivateDataNode(rcvAddr common.Address, rData *crypto.RoundData) {
+	irData := istanbul.RoundDataEncode(*rData)
 	pData, err := Encode(&istanbul.PrivateData{
-		RData: *rData,
+		RData: irData,
 	})
 	if err != nil {
 		log.Error("Failed to encode pData", "err", err)
@@ -154,12 +160,13 @@ func (c *core) sendCommitment(fwd uint64) {
 	logger := c.logger.New("state", c.state)
 	_, lastProposer := c.backend.LastProposal()
 	leader := c.valSet.GetFutProposer(lastProposer, fwd, c.current.Round().Uint64())
-	nData := crypto.ShareRandomSecret(c.getPubKeys(), c.numNodes, c.threshold, ed25519.Random())
+	nData := crypto.ShareRandomSecret(c.getPubKeys(), c.numNodes, c.threshold, crypto.Random())
 	// nData.Sender = c.address
 
+	iNData := istanbul.NodeDataEncode(nData)
 	// creating a commitment using a nData
 	commitment, err := Encode(&istanbul.Commitment{
-		NData: nData,
+		NData: iNData,
 	})
 	if err != nil {
 		logger.Error("Failed to encode commitment", "fwd", fwd)
@@ -194,7 +201,8 @@ func (c *core) handleCommitment(msg *message, src istanbul.Validator) error {
 		return errFailedDecodeCommitment
 	}
 
-	comm := &cmsg.NData
+	dcomm := istanbul.NodeDataDecode(cmsg.NData)
+	comm := &dcomm
 	if err := crypto.ValidateCommit(false, comm, c.getPubKeys(), c.numNodes, c.threshold); err != nil {
 		log.Error("Invalid commitment", "from", src.Address(), "index", index, "number", comm.Round, "err", err)
 		return errInvalidCommitment
@@ -337,8 +345,9 @@ func (c *core) handlePrivateData(msg *message, src istanbul.Validator) error {
 	}
 
 	// TODO(sourav): validate private data
-	root := pData.RData.Root
-	c.nodePrivData[root] = &pData.RData
+	rData := istanbul.RoundDataDecode(pData.RData)
+	root := rData.Root
+	c.nodePrivData[root] = &rData
 
 	// sending a signal to privDataCh about availability of data
 	select {
@@ -379,8 +388,8 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 		aData = crypto.NodeData{
 			Round:    seq,
 			Root:     root,
-			Points:   preprepare.Proposal.Commitments(),
-			EncEvals: preprepare.Proposal.EncEvals(),
+			Points:   istanbul.BytesToPoints(preprepare.Proposal.Commitments()),
+			EncEvals: istanbul.BytesToPoints(preprepare.Proposal.EncEvals()),
 		}
 
 		if err := c.handleAggregate(src.Address(), &aData); err != nil {

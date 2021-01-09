@@ -21,7 +21,6 @@ import (
 	"io"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
@@ -107,8 +106,8 @@ func IstanbulFilteredHeader(h *Header, keepSeal bool) *Header {
 	// DRB specific cleanup
 	newHeader.RBRoot = common.Hash{}
 	newHeader.IndexSet = []byte{}
-	newHeader.Commitments = crypto.Points{}
-	newHeader.EncEvals = crypto.Points{}
+	newHeader.Commitments = [][]byte{}
+	newHeader.EncEvals = [][]byte{}
 
 	return newHeader
 }

@@ -30,8 +30,9 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/istanbul"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/crypto/ed25519"
+	// "github.com/ethereum/go-ethereum/crypto/ed25519"
 	"github.com/ethereum/go-ethereum/event"
+	ed25519 "github.com/ethereum/go-ethereum/filippo.io/edwards25519"
 	"github.com/ethereum/go-ethereum/log"
 	metrics "github.com/ethereum/go-ethereum/metrics"
 	"gopkg.in/karalabe/cookiejar.v2/collections/prque"
@@ -408,9 +409,9 @@ func (c *core) startNewRound(round *big.Int) {
 }
 
 // getPubKeys returns publicKyes in the form of a array
-func (c *core) getPubKeys() crypto.Points {
+func (c *core) getPubKeys() []ed25519.Point {
 	var (
-		pubKeys = make(crypto.Points, c.numNodes)
+		pubKeys = make([]ed25519.Point, c.numNodes)
 		index   int
 	)
 	for addr, key := range c.pubKeys {

@@ -9,7 +9,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/ethereum/go-ethereum/crypto"
 )
 
 var _ = (*headerMarshaling)(nil)
@@ -32,8 +31,8 @@ func (h Header) MarshalJSON() ([]byte, error) {
 		Extra       hexutil.Bytes  `json:"extraData"        gencodec:"required"`
 		RBRoot      common.Hash    `json:"rbHash" 			gencodec:"required"`
 		IndexSet    hexutil.Bytes  `json:"indexSet"         gencodec:"required"`
-		Commitments crypto.Points  `json:"commitments"      gencodec:"required"`
-		EncEvals    crypto.Points  `json:"encEvals"      gencodec:"required"`
+		Commitments [][]byte       `json:"commitments"      gencodec:"required"`
+		EncEvals    [][]byte       `json:"encEvals"      gencodec:"required"`
 		MixDigest   common.Hash    `json:"mixHash"`
 		Nonce       BlockNonce     `json:"nonce"`
 		Hash        common.Hash    `json:"hash"`
@@ -78,10 +77,10 @@ func (h *Header) UnmarshalJSON(input []byte) error {
 		GasUsed     *hexutil.Uint64 `json:"gasUsed"          gencodec:"required"`
 		Time        *hexutil.Uint64 `json:"timestamp"        gencodec:"required"`
 		Extra       *hexutil.Bytes  `json:"extraData"        gencodec:"required"`
-		RBRoot      *common.Hash    `json:"rbRoot" 			 gencodec:"required"`
+		RBRoot      *common.Hash    `json:"rbRoot" 		  gencodec:"required"`
 		IndexSet    *hexutil.Bytes  `json:"indexSet"         gencodec:"required"`
-		Commitments *crypto.Points  `json:"commitments"      gencodec:"required"`
-		EncEvals    *crypto.Points  `json:"encEvals"      gencodec:"required"`
+		Commitments *[][]byte       `json:"commitments"      gencodec:"required"`
+		EncEvals    *[][]byte       `json:"encEvals"   	  gencodec:"required"`
 		MixDigest   *common.Hash    `json:"mixHash"`
 		Nonce       *BlockNonce     `json:"nonce"`
 	}

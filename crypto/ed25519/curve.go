@@ -21,7 +21,7 @@ import (
 	// "reflect"
 	// "strconv"
 	// "unsafe"
-	"filippo.io/edwards25519"
+	"github.com/ethereum/go-ethereum/filippo.io/edwards25519"
 )
 
 // libsodium linking code above import C statement
@@ -64,7 +64,7 @@ type Point struct {
 // }
 
 // RawPoint returns a new point template, used for creating valid point later
-func Raw_point() (Point) { 
+func Raw_point() Point {
 
 	return Point{*edwards25519.NewGeneratorPoint()}
 }
@@ -78,12 +78,12 @@ func PointOne() Point {
 // returns a point with value as byte representation
 func Point_from_bytes(value []byte) (Point, error) {
 
-	p,err := edwards25519.NewIdentityPoint().SetBytes(value)
-	return Point{*p},err
+	p, err := edwards25519.NewIdentityPoint().SetBytes(value)
+	return Point{*p}, err
 }
 
 // returns a point from byte representation of y_packed
-func Point_from_uniform(data []byte) (Point) { // TODO:check if it return valid point in test
+func Point_from_uniform(data []byte) Point { // TODO:check if it return valid point in test
 	// for i, j := 0, len(data)-1; i < j; i, j = i+1, j-1 { // reversal of bytes
 	// 	data[i], data[j] = data[j], data[i]
 	// }
@@ -106,7 +106,7 @@ func Point_from_uniform(data []byte) (Point) { // TODO:check if it return valid 
 // }
 
 // raises base to power s
-func Base_times(s Scalar) (Point) {
+func Base_times(s Scalar) Point {
 	// temp := RawPoint()
 	// if C.crypto_scalarmult_ed25519_base_noclamp((*C.uchar)(&temp.Val[0]), (*C.uchar)(&s.Val[0])) == 0 {
 	// 	return temp, nil
@@ -129,7 +129,7 @@ func (p Point) Equal(o Point) bool { //TODO test function
 	// 	return true
 	// }
 	// return (C.sodium_memcmp(unsafe.Pointer(&p.Val[0]), unsafe.Pointer(&o.Val[0]), 32) == 0)
-	if p.pt.Equal(&o.pt) == 1{
+	if p.pt.Equal(&o.pt) == 1 {
 		return true
 	}
 	return false
@@ -148,7 +148,7 @@ func (p Point) Add(o Point) Point { // removed error handling
 	// 	return result
 	// }
 	// panic("Add not working")
-	return Point{*edwards25519.NewIdentityPoint().Add(&p.pt,&o.pt)}
+	return Point{*edwards25519.NewIdentityPoint().Add(&p.pt, &o.pt)}
 }
 
 func (p Point) Sub(o Point) Point { //removed error handling
@@ -157,7 +157,7 @@ func (p Point) Sub(o Point) Point { //removed error handling
 	// 	return result
 	// }
 	// panic("Sub not working")
-	return Point{*edwards25519.NewIdentityPoint().Subtract(&p.pt,&o.pt)}
+	return Point{*edwards25519.NewIdentityPoint().Subtract(&p.pt, &o.pt)}
 }
 
 func (p Point) Mul(s Scalar) Point { // removed error handling
@@ -166,16 +166,15 @@ func (p Point) Mul(s Scalar) Point { // removed error handling
 	// 	return temp
 	// }
 	// panic("Mul not working")
-	return Point{*edwards25519.NewIdentityPoint().ScalarMult(&s.sc,&p.pt)}
+	return Point{*edwards25519.NewIdentityPoint().ScalarMult(&s.sc, &p.pt)}
 }
-
 
 func (p Point) Bytes() []byte {
 	return p.pt.Bytes()
 }
 
 func (p Point) Copy() Point {
-	temp:= Raw_point()
+	temp := Raw_point()
 	temp.pt.Set(&p.pt)
 	return temp
 }
@@ -219,23 +218,20 @@ func RawScalar() Scalar {
 
 // returns scalar from little endian rep of value
 func Scalar_from_bytes(data []byte) (Scalar, error) {
-	
 
-	copy_data := make([]byte,len(data))
-	if len(data)!= 32 {
-		return RawScalar(),errors.New("len data must be 32")
+	copy_data := make([]byte, len(data))
+	if len(data) != 32 {
+		return RawScalar(), errors.New("len data must be 32")
 	}
-	copy(copy_data,data)
+	copy(copy_data, data)
 	for i, j := 0, len(copy_data)-1; i < j; i, j = i+1, j-1 { // reversal of bytes
 		copy_data[i], copy_data[j] = copy_data[j], copy_data[i]
 	}
-	sc,err := edwards25519.NewScalar().SetCanonicalBytes(copy_data)
-	
-	return Scalar{*sc},err
+	sc, err := edwards25519.NewScalar().SetCanonicalBytes(copy_data)
+
+	return Scalar{*sc}, err
 
 }
-
-
 
 func ScalarReduce(data []byte) Scalar {
 	// obtain a uniformly distributed scalar value from a at least 40 bytes (~317 bit) random data,
@@ -251,16 +247,16 @@ func ScalarReduce(data []byte) Scalar {
 // 	return false
 // }
 
-func BintToScalar(v big.Int) (Scalar) {
+func BintToScalar(v big.Int) Scalar {
 	val := v.Bytes()
 
 	for i, j := 0, len(val)-1; i < j; i, j = i+1, j-1 { // reversal of bytes
 		val[i], val[j] = val[j], val[i]
 	}
-	for len(val)<32 {
-		val = append(val,0)
+	for len(val) < 32 {
+		val = append(val, 0)
 	}
-	tempsc,_ := edwards25519.NewScalar().SetCanonicalBytes(val)
+	tempsc, _ := edwards25519.NewScalar().SetCanonicalBytes(val)
 	return Scalar{*tempsc}
 }
 
@@ -268,16 +264,16 @@ func Random() Scalar { //TODO: make it seedable
 	// rand_big_int, _ := rand.Int(rand.Reader, GROUP_ORDER)
 	// return NewScalar(*rand_big_int)
 
-	rand_big_int,_ := rand.Int(rand.Reader,GROUP_ORDER)
+	rand_big_int, _ := rand.Int(rand.Reader, GROUP_ORDER)
 	return BintToScalar(*rand_big_int)
 }
 
-func RandomSeed(seed int64) (Scalar) {
+func RandomSeed(seed int64) Scalar {
 	r := rnd.New(rnd.NewSource(seed))
 	// rand_big_int,_ := rand.Int(rand.Reader,GROUP_ORDER)
-	rand_big_int := new(big.Int).Rand(r,GROUP_ORDER)
+	rand_big_int := new(big.Int).Rand(r, GROUP_ORDER)
 	return BintToScalar(*rand_big_int)
- 	
+
 }
 
 func (s Scalar) Equal(o Scalar) bool { // Test this function
@@ -303,7 +299,7 @@ func (a Scalar) Add(b Scalar) Scalar {
 	// result.Refresh_bint()
 	// return result
 
-	return Scalar{*edwards25519.NewScalar().Add(&a.sc,&b.sc)}
+	return Scalar{*edwards25519.NewScalar().Add(&a.sc, &b.sc)}
 }
 
 func (a Scalar) Sub(b Scalar) Scalar {
@@ -311,7 +307,7 @@ func (a Scalar) Sub(b Scalar) Scalar {
 	// C.crypto_core_ed25519_scalar_sub((*C.uchar)(&result.Val[0]), (*C.uchar)(&a.Val[0]), (*C.uchar)(&b.Val[0]))
 	// result.Refresh_bint()
 	// return result
-	return Scalar{*edwards25519.NewScalar().Subtract(&a.sc,&b.sc)}
+	return Scalar{*edwards25519.NewScalar().Subtract(&a.sc, &b.sc)}
 }
 
 func (a Scalar) Mul(b Scalar) Scalar {
@@ -319,7 +315,7 @@ func (a Scalar) Mul(b Scalar) Scalar {
 	// C.crypto_core_ed25519_scalar_mul((*C.uchar)(&result.Val[0]), (*C.uchar)(&a.Val[0]), (*C.uchar)(&b.Val[0]))
 	// result.Refresh_bint()
 	// return result
-	return Scalar{*edwards25519.NewScalar().Multiply(&a.sc,&b.sc)}
+	return Scalar{*edwards25519.NewScalar().Multiply(&a.sc, &b.sc)}
 }
 
 func (a Scalar) Div(b Scalar) Scalar {
@@ -366,28 +362,26 @@ func (a Scalar) Invert() {
 }
 
 func (a Scalar) Bytes() []byte {
-	
+
 	return a.sc.Bytes()
 }
 
-
 func (a Scalar) Copy() Scalar {
-	cpy:= NewScalar()
+	cpy := NewScalar()
 	return Scalar{*cpy.sc.Set(&a.sc)}
 }
 
-func MSM(scalars []Scalar,points []Point) (Point){
-	var scalars_raw []*edwards25519.Scalar;
-	var points_raw []*edwards25519.Point;
-	for i:=0;i <len(scalars);i++ {
-		scalars_raw = append(scalars_raw,&scalars[i].sc)
+func MSM(scalars []Scalar, points []Point) Point {
+	var scalars_raw []*edwards25519.Scalar
+	var points_raw []*edwards25519.Point
+	for i := 0; i < len(scalars); i++ {
+		scalars_raw = append(scalars_raw, &scalars[i].sc)
 	}
-	for j:=0;j <len(points);j++ {
-		points_raw = append(points_raw,&points[j].pt)
+	for j := 0; j < len(points); j++ {
+		points_raw = append(points_raw, &points[j].pt)
 	}
-	return Point{*edwards25519.NewIdentityPoint().VarTimeMultiScalarMult(scalars_raw,points_raw)}
+	return Point{*edwards25519.NewIdentityPoint().VarTimeMultiScalarMult(scalars_raw, points_raw)}
 }
-
 
 // ---------------------------------------------
 

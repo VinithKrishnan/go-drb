@@ -23,7 +23,8 @@ import (
 
 	"github.com/ethereum/go-ethereum/consensus/istanbul"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/crypto/ed25519"
+	// "github.com/ethereum/go-ethereum/crypto/ed25519"
+	ed25519 "github.com/ethereum/go-ethereum/filippo.io/edwards25519"
 	"github.com/ethereum/go-ethereum/log"
 )
 
@@ -39,9 +40,10 @@ func (c *core) sendReconstruct(seq uint64) {
 		recData := crypto.ReconstructData(aCommit, encEval, c.edKey.Pkey, c.edKey.Skey)
 		recData.Index = uint64(index)
 
+		irecData := istanbul.RecDataEncode(recData)
 		reconstruct, err := Encode(&istanbul.Reconstruct{
 			Seq:     seq,
-			RecData: recData,
+			RecData: irecData,
 		})
 		if err != nil {
 			log.Error("Failed to encode reconstruction message", "number", seq)
@@ -80,7 +82,7 @@ func (c *core) handleReconstruct(msg *message, src istanbul.Validator) error {
 		return errAggDataNotFound
 	}
 
-	recon := rmsg.RecData
+	recon := istanbul.RecDataDecode(rmsg.RecData)
 	rIndex := recon.Index
 	rPkey := c.pubKeys[src.Address()]
 	encShare := aData.EncEvals[rIndex]
@@ -99,12 +101,12 @@ func (c *core) addReconstruct(seq, index uint64, share ed25519.Point) {
 		c.nodeRecData[seq] = make(map[uint64]ed25519.Point)
 	}
 	c.nodeRecData[seq][index] = share
-	log.Debug("Added share for", "number", seq, "share", hex.EncodeToString(share.Val), "from", index)
+	log.Debug("Added share for", "number", seq, "share", hex.EncodeToString(share.Bytes()), "from", index)
 
 	if len(c.nodeRecData[seq]) == c.threshold {
 		output := crypto.RecoverBeacon(c.nodeRecData[seq], c.threshold)
 		c.beacon[seq] = output
-		log.Info("Beacon output for", "number", seq, "output", hex.EncodeToString(output.Val))
+		log.Info("Beacon output for", "number", seq, "output", hex.EncodeToString(output.Bytes()))
 
 		// Logging handle prepare time
 		rectime := c.logdir + "rectime"
@@ -112,7 +114,7 @@ func (c *core) addReconstruct(seq, index uint64, share ed25519.Point) {
 		if err != nil {
 			log.Error("Can't open rectimef  file", "error", err)
 		}
-		fmt.Fprintln(rectimef, seq, c.address.Hex(), hex.EncodeToString(output.Val), c.Now())
+		fmt.Fprintln(rectimef, seq, c.address.Hex(), hex.EncodeToString(output.Bytes()), c.Now())
 		rectimef.Close()
 	}
 }
