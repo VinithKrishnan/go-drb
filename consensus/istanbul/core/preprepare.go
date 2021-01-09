@@ -347,7 +347,9 @@ func (c *core) handlePrivateData(msg *message, src istanbul.Validator) error {
 	// TODO(sourav): validate private data
 	rData := istanbul.RoundDataDecode(pData.RData)
 	root := rData.Root
+	c.nodeMu.Lock()
 	c.nodePrivData[root] = &rData
+	c.nodeMu.Unlock()
 
 	// sending a signal to privDataCh about availability of data
 	select {
