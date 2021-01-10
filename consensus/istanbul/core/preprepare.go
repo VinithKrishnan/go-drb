@@ -401,7 +401,7 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 		}
 
 		if err := c.handleAggregate(src.Address(), &aData); err != nil {
-			log.Error("Error in HandleAggregate", "src", src.Address(), "rnd", aData.Round, "err", err)
+			// log.Error("Error in HandleAggregate", "src", src.Address(), "rnd", aData.Round, "err", err)
 			return err
 		}
 	}
