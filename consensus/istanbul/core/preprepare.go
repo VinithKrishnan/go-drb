@@ -326,7 +326,7 @@ func (c *core) aggregate(idx int) {
 // handleAggregate initiates the procedure to handle aggregated message
 func (c *core) handleAggregate(sender common.Address, aData *crypto.NodeData) error {
 	if !c.valSet.IsProposer(sender) {
-		log.Error("Aggregate not from leader", "sender", sender, "leader", c.valSet.GetProposer())
+		// log.Error("Aggregate not from leader", "sender", sender, "leader", c.valSet.GetProposer())
 		return errNotFromProposer
 	}
 
