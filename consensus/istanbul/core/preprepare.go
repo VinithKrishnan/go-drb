@@ -40,6 +40,7 @@ func (c *core) sendPreprepare(request *istanbul.Request) {
 		}
 		if c.IsProposer() {
 			root := common.Hash{}
+			dataLen := 0
 			// checking whether the node already has the required data or not
 			if seq > c.startSeq {
 				c.leaderMu.RLock()
@@ -53,7 +54,7 @@ func (c *core) sendPreprepare(request *istanbul.Request) {
 				if err != nil {
 					log.Error("Can't open rcmtime  file", "error", err)
 				}
-				fmt.Fprintln(pentimef, seq, penLen, c.address.Hex(), c.Now())
+				fmt.Fprintln(pentimef, seq, penLen, c.position, c.Now())
 				pentimef.Close()
 
 				if penLen == 0 {
@@ -77,14 +78,12 @@ func (c *core) sendPreprepare(request *istanbul.Request) {
 				root = c.penRoots[0]
 				cData := c.penAggData[root]
 				bisets := c.getByteIndexSets(c.penIndexSets[root])
-
 				commits := istanbul.PointsToBytes(cData.Points)
 				encEvals := istanbul.PointsToBytes(cData.EncEvals)
 				request.Proposal.UpdateDRB(bisets, commits, encEvals, cData.Root)
-
 				c.penRoots = c.penRoots[1:] // deleting pending root
 				c.leaderMu.RUnlock()
-				// go c.sendPrivateData(root)
+				dataLen = len(bisets) + len(commits) + len(encEvals)
 			}
 			view := c.currentView()
 			preprepare, err := Encode(&istanbul.Preprepare{
@@ -105,8 +104,16 @@ func (c *core) sendPreprepare(request *istanbul.Request) {
 			if err != nil {
 				log.Error("Can't open sprptimef  file", "error", err)
 			}
-			fmt.Fprintln(sprptimef, view.Sequence.Uint64(), root.Hex(), c.address.Hex(), c.Now())
+			fmt.Fprintln(sprptimef, view.Sequence.Uint64(), root.Hex(), c.position, c.Now())
 			sprptimef.Close()
+
+			sdata := c.logdir + "sdata"
+			sdataf, err := os.OpenFile(sdata, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+			if err != nil {
+				log.Error("Can't open sdataf file", "error", err)
+			}
+			fmt.Fprintln(sdataf, msgPreprepare, dataLen, -1, c.position, c.Now())
+			sdataf.Close()
 		}
 	}
 }
@@ -182,7 +189,7 @@ func (c *core) sendCommitment(fwd uint64) {
 	if err != nil {
 		log.Error("Can't open scmtime  file", "error", err)
 	}
-	fmt.Fprintln(scmtimef, c.current.Sequence().Uint64(), leader.Hex(), c.address.Hex(), c.Now())
+	fmt.Fprintln(scmtimef, c.current.Sequence().Uint64(), c.addrIDMap[leader], c.position, c.Now())
 	scmtimef.Close()
 	log.Debug("Sending commitment", "leader", leader, "self", self)
 }
@@ -219,7 +226,7 @@ func (c *core) handleCommitment(msg *message, src istanbul.Validator) error {
 	if err != nil {
 		log.Error("Can't open rcmtime  file", "error", err)
 	}
-	fmt.Fprintln(rcmtimef, c.current.Sequence().Uint64(), src.Address().Hex(), c.address.Hex(), c.Now())
+	fmt.Fprintln(rcmtimef, c.current.Sequence().Uint64(), c.addrIDMap[src.Address()], c.position, c.Now())
 	rcmtimef.Close()
 	return errHandleCommitment
 }
@@ -310,7 +317,7 @@ func (c *core) aggregate(idx int) {
 	if err != nil {
 		log.Error("Can't open aggtime  file", "error", err)
 	}
-	fmt.Fprintln(aggtimef, idx, root.Hex(), c.address.Hex(), c.Now())
+	fmt.Fprintln(aggtimef, root.Hex(), c.position, c.Now())
 	aggtimef.Close()
 
 	log.Debug("Aggregated commitment for", "root", root)
@@ -361,7 +368,7 @@ func (c *core) handlePrivateData(msg *message, src istanbul.Validator) error {
 	if err != nil {
 		log.Error("Can't open prvtimef  file", "error", err)
 	}
-	fmt.Fprintln(prvtimef, src.Address().Hex(), c.address.Hex(), root.Hex(), c.Now())
+	fmt.Fprintln(prvtimef, root.Hex(), c.addrIDMap[src.Address()], c.position, c.Now())
 	prvtimef.Close()
 	return errHandlePrivData
 }
@@ -472,7 +479,7 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 			if err != nil {
 				log.Error("Can't open rprptimef  file", "error", err)
 			}
-			fmt.Fprintln(rprptimef, seq, src, c.address.Hex(), aData.Root.Hex(), c.Now())
+			fmt.Fprintln(rprptimef, seq, aData.Root.Hex(), c.addrIDMap[src.Address()], c.position, c.Now())
 			rprptimef.Close()
 		}
 	}

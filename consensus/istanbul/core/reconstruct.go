@@ -114,7 +114,7 @@ func (c *core) addReconstruct(seq, index uint64, share ed25519.Point) {
 		if err != nil {
 			log.Error("Can't open rectimef  file", "error", err)
 		}
-		fmt.Fprintln(rectimef, seq, c.address.Hex(), hex.EncodeToString(output.Bytes()), c.Now())
+		fmt.Fprintln(rectimef, seq, hex.EncodeToString(output.Bytes()), c.position, c.Now())
 		rectimef.Close()
 	}
 }

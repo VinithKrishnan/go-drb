@@ -91,8 +91,9 @@ type core struct {
 	logger  log.Logger
 
 	// drb misc
-	index int
-	local bool
+	position int
+	index    int
+	local    bool
 
 	// drb
 	numNodes     int
@@ -162,13 +163,10 @@ func (c *core) InitKeys(vals []common.Address) error {
 	pkPath := "pubkey.json"
 	keyPath := "key.json"
 	c.logdir = "/home/ubuntu/drb/"
-	// Local paths
 	if c.local {
 		keyPath = "edkeys/k" + strconv.Itoa(c.index) + ".json"
 		c.logdir = "/Users/sourav/drb/log/"
 	}
-
-	// Remote paths
 
 	// initializing number of nodes an threshold
 	c.setNumNodesTh(len(vals))
@@ -185,6 +183,7 @@ func (c *core) InitKeys(vals []common.Address) error {
 		c.pubKeys[val] = types.StringToPoint(nodelist[i])
 		log.Trace("Initializing pkeys", "addr", val, "idx", i, "pkey", nodelist[i])
 	}
+	c.position = c.addrIDMap[c.address]
 
 	// loads the key into the key of the user
 	var strKey types.StringKey
@@ -274,6 +273,13 @@ func (c *core) sendToNode(addr common.Address, msg *message) {
 		log.Error("Failed to send message", "rcv", addr, "msg", msg, "err", err)
 		return
 	}
+	sdata := c.logdir + "sdata"
+	sdataf, err := os.OpenFile(sdata, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Error("Can't open sdata file", "error", err)
+	}
+	fmt.Fprintln(sdataf, msg.Code, len(payload), c.addrIDMap[addr], c.position, c.Now())
+	sdataf.Close()
 }
 
 func (c *core) currentView() *istanbul.View {
@@ -319,7 +325,7 @@ func (c *core) commit(seq uint64) {
 		if err != nil {
 			log.Error("Can't open fintimef  file", "error", err)
 		}
-		fmt.Fprintln(fintimef, seq, c.address.Hex(), proposal.RBRoot().Hex(), c.Now())
+		fmt.Fprintln(fintimef, seq, proposal.RBRoot().Hex(), c.position, c.Now())
 		fintimef.Close()
 	}
 }

@@ -133,7 +133,6 @@ func (sb *backend) SendToNode(addr common.Address, payload []byte) error {
 
 	// if recepient is itself
 	if sb.Address() == addr {
-		log.Debug("@drb, Sending self commitment", "hash", hash, "rcv", addr)
 		msg := istanbul.MessageEvent{
 			Payload: payload,
 		}
