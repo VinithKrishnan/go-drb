@@ -259,7 +259,7 @@ func initialize() {
 		}
 	}
 
-	maxPeers := 80
+	maxPeers := 256
 	if *bootstrapMode {
 		maxPeers = 800
 	}
