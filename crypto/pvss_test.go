@@ -58,6 +58,7 @@ func BenchmarkShareGeneration(b *testing.B) {
 
 }
 
+// time taken to generate commitments
 func BenchmarkCommitmentGeneration(b *testing.B) {
 	num_receivers := NUM_NODES
 	poly := RandomPoly(RECOVERY_THRESHOLD - 1)
@@ -75,6 +76,7 @@ func BenchmarkCommitmentGeneration(b *testing.B) {
 
 }
 
+// time taken to genertae proofs
 func BenchmarkProofGeneration(b *testing.B) {
 	num_receivers := NUM_NODES
 	poly := RandomPoly(RECOVERY_THRESHOLD - 1)
@@ -98,6 +100,7 @@ func BenchmarkProofGeneration(b *testing.B) {
 
 }
 
+// time taken for aggregation
 func BenchmarkAggregation(b *testing.B) {
 	num_receivers := NUM_NODES
 	poly := RandomPoly(RECOVERY_THRESHOLD - 1)
@@ -133,6 +136,8 @@ func BenchmarkAggregation(b *testing.B) {
 
 }
 
+
+// time taken for reedsolomon codeword verification
 func BenchmarkCodeWordVerification(b *testing.B) {
 	codeword := RandomCodeword(NUM_NODES, RECOVERY_THRESHOLD)
 	num_receivers := NUM_NODES
@@ -164,6 +169,7 @@ func BenchmarkCodeWordVerification(b *testing.B) {
 
 }
 
+// time taken for nizk proof verification
 func BenchmarkShareProofVerification(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		if !(DleqVerify(len(public_keys),proofs, public_keys)){
@@ -171,22 +177,6 @@ func BenchmarkShareProofVerification(b *testing.B) {
 	
 		}
 	}
-}
-
-func TestDLEQ(t *testing.T) {
-	alpha := Random()
-	e, z := DleqProve(G, *H, *ed25519.NewIdentityPoint().ScalarMult(alpha, &G), *ed25519.NewIdentityPoint().ScalarMult(alpha, H), *alpha)
-	proof := NizkProof{
-		Commit: *ed25519.NewIdentityPoint().ScalarMult(alpha, &G),
-		EncEval: *ed25519.NewIdentityPoint().ScalarMult(alpha, H),
-		Chal: e,
-		Response: z,
-	}
-	result := DleqVerify(1,[]NizkProof{proof},[]ed25519.Point{*H})
-	if !result {
-		t.Errorf("DLEQ not working")
-	}
-
 }
 
 //benchmarks prove and verify DLEQ
@@ -208,6 +198,40 @@ func BenchmarkDLEQ(b *testing.B) {
 	
 	}
 }
+
+// bechmarks BeaconRecovery
+func Benchmark_recover_secret(b *testing.B) {
+	DecSharesMap := make(map[uint64]*ed25519.Point)
+	for idx := 0; idx < RECOVERY_THRESHOLD; idx++ {
+		DecSharesMap[uint64(idx)]=&decrypted_shares[idx]
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+	rs := RecoverBeacon(DecSharesMap, RECOVERY_THRESHOLD)
+	if rs.Equal(ed25519.NewIdentityPoint().ScalarMult(secret, H)) == 0 {
+		b.Errorf("Recover secret not working")
+	}
+		
+	}
+}
+
+func TestDLEQ(t *testing.T) {
+	alpha := Random()
+	e, z := DleqProve(G, *H, *ed25519.NewIdentityPoint().ScalarMult(alpha, &G), *ed25519.NewIdentityPoint().ScalarMult(alpha, H), *alpha)
+	proof := NizkProof{
+		Commit: *ed25519.NewIdentityPoint().ScalarMult(alpha, &G),
+		EncEval: *ed25519.NewIdentityPoint().ScalarMult(alpha, H),
+		Chal: e,
+		Response: z,
+	}
+	result := DleqVerify(1,[]NizkProof{proof},[]ed25519.Point{*H})
+	if !result {
+		t.Errorf("DLEQ not working")
+	}
+
+}
+
+
 
 // func TestDLEQInvalidChallenge(t *testing.T) {
 // 	alpha := ed25519.Random()
@@ -338,20 +362,7 @@ func Test_recover_secret(t *testing.T) {
 	}
 }
 
-func Benchmark_recover_secret(b *testing.B) {
-	DecSharesMap := make(map[uint64]*ed25519.Point)
-	for idx := 0; idx < RECOVERY_THRESHOLD; idx++ {
-		DecSharesMap[uint64(idx)]=&decrypted_shares[idx]
-	}
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-	rs := RecoverBeacon(DecSharesMap, RECOVERY_THRESHOLD)
-	if rs.Equal(ed25519.NewIdentityPoint().ScalarMult(secret, H)) == 0 {
-		b.Errorf("Recover secret not working")
-	}
-		
-	}
-}
+
 
 // func TestPoint_G(t *testing.T) {
 // 	if !reflect.DeepEqual(H, H) {
