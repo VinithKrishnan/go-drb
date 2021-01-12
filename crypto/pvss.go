@@ -11,7 +11,7 @@ import (
 	rnd "math/rand"
 
 	"github.com/ethereum/go-ethereum/common"
-	ed25519 "github.com/ethereum/go-ethereum/filippo.io/edwards25519"
+	ed25519 "filippo.io/edwards25519"
 	"github.com/ethereum/go-ethereum/log"
 )
 
@@ -373,27 +373,37 @@ func VerifyShares(proofs NizkProofs, pubKeys Points, total, ths int) bool {
 	// 2. verify the validity of the shares by sampling and testing with a random codeword
 	codeword := RandomCodeword(total, ths)
 	var commitments = make([]*ed25519.Point, total)
-	for i := 1; i < total; i++ {
+	for i := 0; i < total; i++ {
 		commitments[i] = ed25519.NewIdentityPoint().Set(&proofs[i].Commit)
 	}
 	product := ed25519.NewIdentityPoint().VarTimeMultiScalarMult(codeword, commitments)
 	return product.Equal(ONE) == 1
+	return true
 }
 
 // AggregateCommit aggregates polynomial commitment
+
 func AggregateCommit(total int, indexSets []int, data []*NodeData) *NodeData {
 	var (
 		commits  = make(Points, total)
 		encEvals = make(Points, total)
+		i        int
+		proof    NizkProof
+		nData    *NodeData
 	)
 	lenIS := len(indexSets)
-	for id := 0; id < lenIS; id++ {
-		nodeData := data[id]
-		for i, proof := range nodeData.Proofs {
-			if id == 0 {
-				commits[i] = proof.Commit
-				encEvals[i] = proof.EncEval
-			}
+	nDataZero := data[0]
+	proofs := nDataZero.Proofs
+	for i, proof = range proofs {
+		commits[i] = proof.Commit
+		encEvals[i] = proof.EncEval
+	}
+	for id := 1; id < lenIS; id++ {
+		nData = data[id]
+		proofs = nData.Proofs
+		for i, proof = range proofs {
+			(&commits[i]).Add(&commits[i], &proof.Commit)
+			(&encEvals[i]).Add(&encEvals[i], &proof.EncEval)
 		}
 	}
 	root := aggrMerkleRoot(indexSets, commits, encEvals) // compute merkle root of "commits|encEvals|indexSets"
@@ -556,6 +566,7 @@ func ValidateRoundData(rData RoundData, root common.Hash) bool {
 
 // RecoverBeacon computes the beacon output
 // TODO(sourav): Optimize this!
+// DOUBT: Will number of shares always be equal tp threshold?
 func RecoverBeacon(shares map[uint64]*ed25519.Point, threshold int) ed25519.Point {
 	// initializing indeces
 	idxs := make([]*ed25519.Scalar, threshold)
