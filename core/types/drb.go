@@ -9,6 +9,7 @@ import (
 	// "github.com/ethereum/go-ethereum/crypto/ed25519"
 	// "github.com/ethereum/go-ethereum/filippo.io/edwards25519"
 	ed25519 "github.com/ethereum/go-ethereum/filippo.io/edwards25519"
+	"github.com/ethereum/go-ethereum/log"
 )
 
 // StringKey is a secret key in the string format
@@ -46,11 +47,24 @@ type Key struct {
 
 // StringToKey converts a StringKey to public-private key parii
 func StringToKey(strKey StringKey) Key {
-	bPkey, _ := hex.DecodeString(strKey.Pkey)
-	bSkey, _ := hex.DecodeString(strKey.Skey)
+	bPkey, err1 := hex.DecodeString(strKey.Pkey)
+	bSkey, err2 := hex.DecodeString(strKey.Skey)
 
-	pkey, _ := ed25519.NewIdentityPoint().SetBytes(bPkey)
-	skey, _ := ed25519.NewScalar().SetCanonicalBytes(bSkey)
+	pkey, err3 := ed25519.NewIdentityPoint().SetBytes(bPkey)
+	skey, err4 := ed25519.NewScalar().SetCanonicalBytes(bSkey)
+
+	if err1!=nil {
+		log.Error("Error 1")
+	}
+	if err2!=nil {
+		log.Error("Error 2")
+	}
+	if err3!=nil {
+		log.Error("Error 3")
+	}
+	if err4!=nil {
+		log.Error("Error 4")
+	}
 	return Key{
 		Pkey: *pkey,
 		Skey: *skey,

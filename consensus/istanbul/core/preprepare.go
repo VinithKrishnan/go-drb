@@ -31,13 +31,14 @@ import (
 
 func (c *core) sendPreprepare(request *istanbul.Request) {
 	logger := c.logger.New("state", c.state)
-	// If I'm the proposer and I have the same sequence with the proposal
+	// I have the same sequence with the proposal
 	if c.current.Sequence().Cmp(request.Proposal.Number()) == 0 {
 		// sending polynomial commitment to the leader
 		seq := c.current.Sequence().Uint64()
-		if seq > c.startSeq-c.forwardSeq {
+		if seq > c.startSeq-c.forwardSeq { //DOUBT: What are startSeq and forwardSeq?
 			c.sendCommitment(c.forwardSeq)
 		}
+		// If I'm the proposer
 		if c.IsProposer() {
 			root := common.Hash{}
 			dataLen := 0
@@ -94,6 +95,20 @@ func (c *core) sendPreprepare(request *istanbul.Request) {
 				logger.Error("Failed to encode", "view", view)
 				return
 			}
+
+			// prepSent := 0
+			// for raddr, _ := range c.addrIDMap {
+			// 	prepSent = prepSent + 1
+			// 	if prepSent > 2*c.threshold+1 {
+			// 		break
+			// 	} else {
+			// 		go c.sendToNode(raddr, &message{
+			// 			Code: msgPreprepare,
+			// 			Msg:  preprepare,
+			// 		})
+			// 	}
+			// }
+
 			c.broadcast(&message{
 				Code: msgPreprepare,
 				Msg:  preprepare,
@@ -309,7 +324,7 @@ func (c *core) aggregate(idx int) {
 			Proofs:   proofs,
 		}
 		c.penPrivData[root][raddr] = &rData
-		go c.sendPrivateDataNode(raddr, &rData)
+		go c.sendPrivateDataNode(raddr, &rData) // this is where private data is sent to nodes
 	}
 
 	aggtime := c.logdir + "aggtime"
@@ -405,7 +420,7 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 			return err
 		}
 	}
-
+	// DOUBT: Why should commit be resent?
 	// Ensure we have the same view with the PRE-PREPARE message
 	// If it is old message, see if we need to broadcast COMMIT
 	if err := c.checkMessage(msgPreprepare, preprepare.View); err != nil {
@@ -486,6 +501,8 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 	return nil
 }
 
+// DOUBT:Difference between round and sequence.
+
 func (c *core) handlePreprepareAsync(preprepare *istanbul.Preprepare, root common.Hash, seq, round uint64) {
 	// TODO(sourav): Check whether the private data sent by the leader corresponds
 	// to the content of the propsal. Important to handle leader failures after
@@ -500,6 +517,7 @@ func (c *core) handlePreprepareAsync(preprepare *istanbul.Preprepare, root commo
 			select {
 			// TODO(sourav): We can change this to a bool value indicating
 			// whether the leader sent correct data or not.
+			//DOUBT: Are we checking whehter leaders proposal is correct?
 			case croot := <-c.privDataCh:
 				cseq := preprepare.View.Sequence.Uint64()
 				cround := preprepare.View.Round.Uint64()

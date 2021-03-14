@@ -23,6 +23,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/consensus/istanbul"
 	"github.com/ethereum/go-ethereum/crypto"
+
 	// "github.com/ethereum/go-ethereum/crypto/ed25519"
 	ed25519 "github.com/ethereum/go-ethereum/filippo.io/edwards25519"
 	"github.com/ethereum/go-ethereum/log"
@@ -77,20 +78,22 @@ func (c *core) handleReconstruct(msg *message, src istanbul.Validator) error {
 		return errHandleReconstruct
 	}
 	// check whether aggregate data is available or not
-	aData, aok := c.nodeAggData[rSeq]
+	_, aok := c.nodeAggData[rSeq]
 	if !aok {
+		log.Error("PrePrepare message not received from leader")
 		return errAggDataNotFound
 	}
 
 	recon := istanbul.RecDataDecode(rmsg.RecData)
 	rIndex := recon.Index
-	rPkey := c.pubKeys[src.Address()]
-	encShare := aData.EncEvals[rIndex]
+	//@Vinith TODO: Uncomment the following lines
+	// rPkey := c.pubKeys[src.Address()]
+	// encShare := aData.EncEvals[rIndex]
 
-	if !crypto.ValidateReconstruct(*rPkey, encShare, recon.DecShare, recon.Proof) {
-		log.Error("Invalid reconstruct message", "from", src.Address(), "index", rIndex)
-		return errInvalidReconstruct
-	}
+	// if !crypto.ValidateReconstruct(*rPkey, encShare, recon.DecShare, recon.Proof) {
+	// 	log.Error("Invalid reconstruct message", "from", src.Address(), "index", rIndex)
+	// 	return errInvalidReconstruct
+	// }
 	c.addReconstruct(rSeq, rIndex, recon.DecShare)
 	return errHandleReconstruct
 }

@@ -44,6 +44,16 @@ func (c *core) broadcastCommit(sub *istanbul.Subject) {
 		logger.Error("Failed to encode", "subject", sub)
 		return
 	}
+
+	// for raddr, rID := range c.addrIDMap {
+	// 	if rID == 0 {
+	// 		go c.sendToNode(raddr, &message{
+	// 			Code: msgCommit,
+	// 			Msg:  encodedSubject,
+	// 		})
+	// 		break
+	// 	}
+	// }
 	c.broadcast(&message{
 		Code: msgCommit,
 		Msg:  encodedSubject,

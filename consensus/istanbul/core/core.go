@@ -30,6 +30,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/istanbul"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+
 	// "github.com/ethereum/go-ethereum/crypto/ed25519"
 	"github.com/ethereum/go-ethereum/event"
 	ed25519 "github.com/ethereum/go-ethereum/filippo.io/edwards25519"
@@ -164,8 +165,8 @@ func (c *core) InitKeys(vals []common.Address) error {
 	keyPath := "key.json"
 	c.logdir = "/home/ubuntu/drb/"
 	if c.local {
-		keyPath = "edkeys/k" + strconv.Itoa(c.index) + ".json"
-		c.logdir = "/Users/sourav/drb/log/"
+		keyPath = "/mnt/c/Users/VinithKrishnan/drb-expt/edkeys/k" + strconv.Itoa(c.index) + ".json"
+		c.logdir = "/mnt/c/Users/VinithKrishnan/drb-expt/drb/log/" // should be changed to variable ofr reproducability purpose
 	}
 
 	// initializing number of nodes an threshold
@@ -191,6 +192,7 @@ func (c *core) InitKeys(vals []common.Address) error {
 		log.Error("Can't load node file", "path", keyPath, "error", err)
 		return err
 	}
+	// log.Info("String Key is:", strKey)
 	c.edKey = types.StringToKey(strKey)
 	log.Debug("Initializing local key", "addr", c.address, "pkey", strKey.Pkey)
 	return nil
@@ -319,6 +321,7 @@ func (c *core) commit(seq uint64) {
 
 		if seq > c.startSeq {
 			go c.sendReconstruct(seq)
+			log.Info("Sent reconstruction message")
 		}
 		fintime := c.logdir + "fintime"
 		fintimef, err := os.OpenFile(fintime, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)

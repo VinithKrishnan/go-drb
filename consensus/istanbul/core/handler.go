@@ -174,6 +174,8 @@ func (c *core) handleCheckedMsg(msg *message, src istanbul.Validator) error {
 		return testBacklog(c.handleCommit(msg, src))
 	case msgReconstruct:
 		return testBacklog(c.handleReconstruct(msg, src))
+	// case msgReqMerklePath:
+	// 	return testBacklog(c.handleReqMerklePath(msg, src))
 	case msgRoundChange:
 		return testBacklog(c.handleRoundChange(msg, src))
 	default:
