@@ -99,10 +99,10 @@ func (c *core) sendPreprepare(request *istanbul.Request) {
 			// prepSent := 0
 			// for raddr, _ := range c.addrIDMap {
 			// 	prepSent = prepSent + 1
-			// 	if prepSent > 2*c.threshold+1 {
+			// 	if prepSent > 2*(c.threshold-1)+1 {
 			// 		break
 			// 	} else {
-			// 		go c.sendToNode(raddr, &message{
+			// 		go c.sendToNode(raddr, &message{ // should this be made async?
 			// 			Code: msgPreprepare,
 			// 			Msg:  preprepare,
 			// 		})
@@ -405,8 +405,9 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 
 	seq := preprepare.View.Sequence.Uint64()
 	round := preprepare.View.Round.Uint64()
+	root = preprepare.Proposal.RBRoot()
 	if seq > c.startSeq {
-		root = preprepare.Proposal.RBRoot()
+
 		// Create a NodeData using the Preprepare message
 		aData = crypto.NodeData{
 			Round:    seq,
@@ -433,7 +434,7 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 			// 1. The proposer needs to be a proposer matches the given (Sequence + Round)
 			// 2. The given block must exist
 			if valSet.IsProposer(src.Address()) && c.backend.HasPropsal(preprepare.Proposal.Hash(), preprepare.Proposal.Number()) {
-				c.sendCommitForOldBlock(preprepare.View, preprepare.Proposal.Hash())
+				c.sendCommitForOldBlock(preprepare.View, preprepare.Proposal.RBRoot())
 				return nil
 			}
 		}
@@ -474,7 +475,7 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 				// Broadcast COMMIT and enters Prepared state directly
 				c.acceptPreprepare(preprepare)
 				c.setState(StatePrepared)
-				c.sendCommit()
+				c.sendCommit(c.current.GetLockedRoot())
 			} else {
 				// Send round change
 				c.sendNextRoundChange()
@@ -486,7 +487,7 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 			} else {
 				c.acceptPreprepare(preprepare)
 				c.setState(StatePreprepared)
-				c.sendPrepare()
+				c.sendPrepare(root)
 			}
 			// Logging handle prepare time
 			rprptime := c.logdir + "rprptime"
@@ -540,7 +541,7 @@ func (c *core) handlePreprepareAsync(preprepare *istanbul.Preprepare, root commo
 	//   2. we have no locked proposal
 	c.acceptPreprepare(preprepare)
 	c.setState(StatePreprepared)
-	c.sendPrepare()
+	c.sendPrepare(root)
 }
 
 func (c *core) acceptPreprepare(preprepare *istanbul.Preprepare) {

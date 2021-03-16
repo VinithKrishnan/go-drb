@@ -29,6 +29,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 
 	// "github.com/ethereum/go-ethereum/log"
+
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
@@ -109,15 +110,39 @@ type Preprepare struct {
 	Proposal Proposal
 }
 
+type Prepare struct {
+	Sub  *Subject
+	Root common.Hash
+}
+type Commit struct {
+	Sub  *Subject
+	Root common.Hash
+	//@Vinith : add sig on hash here
+}
+
 // Reconstruct for the reconstruction phase
 type Reconstruct struct {
 	Seq     uint64
 	RecData RecData
 }
 
-// type ReqMerklePath struct {
-// 	Seq uint64
-// }
+type ReqMerklePath struct {
+	Seq uint64
+}
+
+type ReqMultiSig struct {
+	Seq uint64
+}
+
+type MerklePath struct {
+	Seq         uint64
+	Placeholder string
+}
+
+type MultiSig struct {
+	Seq  uint64
+	Root common.Hash
+}
 
 type NodeData struct {
 	Round    uint64
@@ -181,6 +206,27 @@ func RecDataDecode(recData RecData) crypto.RecData {
 		DecShare: *decShare,
 		Proof:    getCProof(recData.Proof),
 	}
+}
+func MerklePathEncode(seq uint64, message string) MerklePath {
+	return MerklePath{
+		Seq:         seq,
+		Placeholder: message,
+	}
+}
+
+func MultiSigEncode(seq uint64, root common.Hash) MultiSig {
+	return MultiSig{
+		Seq:  seq,
+		Root: root,
+	}
+}
+
+func MerklePathDecode(path MerklePath) MerklePath {
+	return path
+}
+
+func MultiSigDecode(root MultiSig) MultiSig {
+	return root
 }
 
 func RoundDataEncode(rData crypto.RoundData) RoundData {

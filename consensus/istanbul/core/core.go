@@ -63,12 +63,15 @@ func New(backend istanbul.Backend, config *istanbul.Config) Engine {
 		local:              config.Local,
 		commitmentCh:       make(chan struct{}, 10),
 		privDataCh:         make(chan common.Hash, 10),
+		merklePathCh:       make(chan uint64, 10),
 		pubKeys:            make(map[common.Address]*ed25519.Point),
 		addrIDMap:          make(map[common.Address]int),
 		idAddrMap:          make(map[int]common.Address),
 		nodeAggData:        make(map[uint64]*crypto.NodeData),
 		nodePrivData:       make(map[common.Hash]*crypto.RoundData),
-		nodeRecData:        make(map[uint64]map[uint64]*ed25519.Point),
+		nodeRecData:        make(map[uint64]map[uint64]*crypto.RecData),
+		nodeDecidedRoot:    make(map[uint64]common.Hash),
+		nodeConfShares:     make(map[uint64]map[uint64]*ed25519.Point),
 		beacon:             make(map[uint64]*ed25519.Point),
 		penAggData:         make(map[common.Hash]*crypto.NodeData),
 		penIndexSets:       make(map[common.Hash][]common.Address),
@@ -103,6 +106,7 @@ type core struct {
 	forwardSeq   uint64
 	commitmentCh chan struct{}    // channel to indicate enough commitment
 	privDataCh   chan common.Hash // channel to indicate that aggregate data has been received
+	merklePathCh chan uint64      // chaneel to indicate merkle path has arrived
 
 	// drb data
 	edKey     types.Key // secret key of the node
@@ -123,10 +127,12 @@ type core struct {
 	penPrivData  map[common.Hash]map[common.Address]*crypto.RoundData
 
 	// for other nodes
-	nodeAggData  map[uint64]*crypto.NodeData          // height: [agg. poly. commit; agg. enc]
-	nodePrivData map[common.Hash]*crypto.RoundData    // height: node's private data for aggregated commitment
-	nodeRecData  map[uint64]map[uint64]*ed25519.Point // height: {index:share}
-	beacon       map[uint64]*ed25519.Point            // height: beacon-output
+	nodeAggData     map[uint64]*crypto.NodeData           // height: [agg. poly. commit; agg. enc]
+	nodePrivData    map[common.Hash]*crypto.RoundData     // height: node's private data for aggregated commitment
+	nodeRecData     map[uint64]map[uint64]*crypto.RecData // height: {index:RecData}
+	beacon          map[uint64]*ed25519.Point             // height: beacon-output
+	nodeDecidedRoot map[uint64]common.Hash                // height:Decided root
+	nodeConfShares  map[uint64]map[uint64]*ed25519.Point  // height: {index:share} @Vinith:Redundant data, can optimize
 
 	backend               istanbul.Backend
 	events                *event.TypeMuxSubscription
@@ -151,6 +157,7 @@ type core struct {
 	pendingRequestsMu *sync.Mutex
 
 	consensusTimestamp time.Time
+
 	// the meter to record the round change rate
 	roundMeter metrics.Meter
 	// the meter to record the sequence update rate
@@ -303,7 +310,7 @@ func (c *core) IsCurrentProposal(blockHash common.Hash) bool {
 	return c.current != nil && c.current.pendingRequest != nil && c.current.pendingRequest.Proposal.Hash() == blockHash
 }
 
-func (c *core) commit(seq uint64) {
+func (c *core) commit(seq uint64, digest common.Hash) {
 	c.setState(StateCommitted)
 
 	proposal := c.current.Proposal()
@@ -320,7 +327,7 @@ func (c *core) commit(seq uint64) {
 		}
 
 		if seq > c.startSeq {
-			go c.sendReconstruct(seq)
+			go c.sendReconstruct(seq, digest)
 			log.Info("Sent reconstruction message")
 		}
 		fintime := c.logdir + "fintime"
@@ -451,12 +458,12 @@ func (c *core) updateRoundState(view *istanbul.View, validatorSet istanbul.Valid
 	// Lock only if both roundChange is true and it is locked
 	if roundChange && c.current != nil {
 		if c.current.IsHashLocked() {
-			c.current = newRoundState(view, validatorSet, c.current.GetLockedHash(), c.current.Preprepare, c.current.pendingRequest, c.backend.HasBadProposal)
+			c.current = newRoundState(view, validatorSet, c.current.GetLockedHash(), c.current.GetLockedRoot(), c.current.Preprepare, c.current.pendingRequest, c.backend.HasBadProposal)
 		} else {
-			c.current = newRoundState(view, validatorSet, common.Hash{}, nil, c.current.pendingRequest, c.backend.HasBadProposal)
+			c.current = newRoundState(view, validatorSet, common.Hash{}, common.Hash{}, nil, c.current.pendingRequest, c.backend.HasBadProposal)
 		}
 	} else {
-		c.current = newRoundState(view, validatorSet, common.Hash{}, nil, nil, c.backend.HasBadProposal)
+		c.current = newRoundState(view, validatorSet, common.Hash{}, common.Hash{}, nil, nil, c.backend.HasBadProposal)
 	}
 }
 

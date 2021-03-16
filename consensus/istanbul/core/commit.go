@@ -23,9 +23,9 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/istanbul"
 )
 
-func (c *core) sendCommit() {
+func (c *core) sendCommit(root common.Hash) {
 	sub := c.current.Subject()
-	c.broadcastCommit(sub)
+	c.broadcastCommit(sub, root)
 }
 
 func (c *core) sendCommitForOldBlock(view *istanbul.View, digest common.Hash) {
@@ -33,15 +33,18 @@ func (c *core) sendCommitForOldBlock(view *istanbul.View, digest common.Hash) {
 		View:   view,
 		Digest: digest,
 	}
-	c.broadcastCommit(sub)
+	c.broadcastCommit(sub, digest)
 }
 
-func (c *core) broadcastCommit(sub *istanbul.Subject) {
+func (c *core) broadcastCommit(sub *istanbul.Subject, root common.Hash) {
 	logger := c.logger.New("state", c.state)
 
-	encodedSubject, err := Encode(sub)
+	encodedCommit, err := Encode(&istanbul.Commit{
+		Sub:  sub,
+		Root: root,
+	})
 	if err != nil {
-		logger.Error("Failed to encode", "subject", sub)
+		logger.Error("Failed to encode", "commit", "in boradcastCommit")
 		return
 	}
 
@@ -49,26 +52,26 @@ func (c *core) broadcastCommit(sub *istanbul.Subject) {
 	// 	if rID == 0 {
 	// 		go c.sendToNode(raddr, &message{
 	// 			Code: msgCommit,
-	// 			Msg:  encodedSubject,
+	// 			Msg:  encodedCommit,
 	// 		})
 	// 		break
 	// 	}
 	// }
 	c.broadcast(&message{
 		Code: msgCommit,
-		Msg:  encodedSubject,
+		Msg:  encodedCommit,
 	})
 }
 
 func (c *core) handleCommit(msg *message, src istanbul.Validator) error {
 	// Decode COMMIT message
-	var commit *istanbul.Subject
+	var commit *istanbul.Commit
 	err := msg.Decode(&commit)
 	if err != nil {
 		return errFailedDecodeCommit
 	}
 
-	if err := c.checkMessage(msgCommit, commit.View); err != nil {
+	if err := c.checkMessage(msgCommit, commit.Sub.View); err != nil {
 		return err
 	}
 
@@ -90,18 +93,18 @@ func (c *core) handleCommit(msg *message, src istanbul.Validator) error {
 
 		// Still need to call LockHash here since state can skip Prepared state and jump directly to the Committed state.
 		c.current.LockHash()
-		c.commit(commit.View.Sequence.Uint64())
+		c.commit(commit.Sub.View.Sequence.Uint64(), commit.Sub.Digest)
 	}
 
 	return nil
 }
 
 // verifyCommit verifies if the received COMMIT message is equivalent to our subject
-func (c *core) verifyCommit(commit *istanbul.Subject, src istanbul.Validator) error {
+func (c *core) verifyCommit(commit *istanbul.Commit, src istanbul.Validator) error {
 	logger := c.logger.New("from", src, "state", c.state)
 
 	sub := c.current.Subject()
-	if !reflect.DeepEqual(commit, sub) {
+	if !reflect.DeepEqual(commit.Sub, sub) {
 		logger.Warn("Inconsistent subjects between commit and proposal", "expected", sub, "got", commit)
 		return errInconsistentSubject
 	}
@@ -111,6 +114,23 @@ func (c *core) verifyCommit(commit *istanbul.Subject, src istanbul.Validator) er
 
 func (c *core) acceptCommit(msg *message, src istanbul.Validator) error {
 	logger := c.logger.New("from", src, "state", c.state)
+
+	// var commit *istanbul.Commit
+	// err := msg.Decode(&commit)
+
+	// if err != nil {
+	// 	return errFailedDecodeCommit
+	// }
+
+	// encodedSubject, err := Encode(&istanbul.Subject{
+	// 	View:   commit.Sub.View,
+	// 	Digest: commit.Sub.Digest,
+	// })
+
+	// submsg := &message{
+	// 	Code: msgCommit, //@Vinith using same message type here , is this alright?
+	// 	Msg:  encodedSubject,
+	// }
 
 	// Add the COMMIT message to current round state
 	if err := c.current.Commits.Add(msg); err != nil {

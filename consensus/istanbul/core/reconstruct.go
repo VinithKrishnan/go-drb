@@ -25,20 +25,23 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 
 	// "github.com/ethereum/go-ethereum/crypto/ed25519"
+	"github.com/ethereum/go-ethereum/common"
 	ed25519 "github.com/ethereum/go-ethereum/filippo.io/edwards25519"
 	"github.com/ethereum/go-ethereum/log"
 )
 
 // sendReconstruct sends a reconstruction message for a particular view
-func (c *core) sendReconstruct(seq uint64) {
-	c.nodeMu.RLock()
+func (c *core) sendReconstruct(seq uint64, digest common.Hash) {
+	c.nodeMu.Lock()
 	aData, ok := c.nodeAggData[seq]
-	c.nodeMu.RUnlock()
+	c.nodeDecidedRoot[seq] = digest
+	c.nodeMu.Unlock()
 	if ok {
 		index := c.addrIDMap[c.Address()]
 		aCommit := aData.Points[index]
 		encEval := aData.EncEvals[index] // aggregated encrypted data
 		recData := crypto.ReconstructData(aCommit, encEval, c.edKey.Pkey, c.edKey.Skey)
+
 		recData.Index = uint64(index)
 
 		irecData := istanbul.RecDataEncode(recData)
@@ -73,41 +76,68 @@ func (c *core) handleReconstruct(msg *message, src istanbul.Validator) error {
 	}
 
 	rSeq := rmsg.Seq
+	recon := istanbul.RecDataDecode(rmsg.RecData)
+	rIndex := recon.Index
+
+	if _, ok := c.nodeRecData[rSeq]; !ok {
+		c.nodeRecData[rSeq] = make(map[uint64]*crypto.RecData)
+	}
+	c.nodeRecData[rSeq][rIndex] = &recon
+	log.Debug("Added Reconstrcution data for", "number", rSeq, "from", rIndex)
+
 	// Beacon output already available, no need to process further
 	if _, rok := c.beacon[rSeq]; rok {
 		return errHandleReconstruct
 	}
-	// check whether aggregate data is available or not
-	_, aok := c.nodeAggData[rSeq]
-	if !aok {
+	// check whether root has been decided or not
+	_, rok := c.nodeDecidedRoot[rSeq]
+	if !rok {
 		log.Error("PrePrepare message not received from leader")
+		go c.SendReqMultiSig(rSeq, src.Address()) // should i make this asynchronous?
+		return errRootNotDecided
+		// done := false
+		// log.Info("Waiting for private data from leader!")
+		// for {
+		// 	select {
+		// 	// TODO(sourav): We can change this to a bool value indicating
+		// 	// whether the leader sent correct data or not.
+		// 	case mpath := <-c.merklePathCh:
+		// 		if mpath == rSeq {
+		// 			done = true
+		// 		}
+		// 	}
+		// 	if done {
+		// 		break
+		// 	}
+		// }
+	}
+
+	aData, aok := c.nodeAggData[rSeq]
+	if !aok {
 		return errAggDataNotFound
 	}
 
-	recon := istanbul.RecDataDecode(rmsg.RecData)
-	rIndex := recon.Index
-	//@Vinith TODO: Uncomment the following lines
-	// rPkey := c.pubKeys[src.Address()]
-	// encShare := aData.EncEvals[rIndex]
+	rPkey := c.pubKeys[src.Address()]
+	encShare := aData.EncEvals[rIndex]
 
-	// if !crypto.ValidateReconstruct(*rPkey, encShare, recon.DecShare, recon.Proof) {
-	// 	log.Error("Invalid reconstruct message", "from", src.Address(), "index", rIndex)
-	// 	return errInvalidReconstruct
-	// }
+	if !crypto.ValidateReconstruct(*rPkey, encShare, recon.DecShare, recon.Proof) {
+		log.Error("Invalid reconstruct message", "from", src.Address(), "index", rIndex)
+		return errInvalidReconstruct
+	}
 	c.addReconstruct(rSeq, rIndex, recon.DecShare)
 	return errHandleReconstruct
 }
 
 // addReconstruct adds a reconstruction message
 func (c *core) addReconstruct(seq, index uint64, share ed25519.Point) {
-	if _, ok := c.nodeRecData[seq]; !ok {
-		c.nodeRecData[seq] = make(map[uint64]*ed25519.Point)
-	}
-	c.nodeRecData[seq][index] = &share
-	log.Debug("Added share for", "number", seq, "share", hex.EncodeToString(share.Bytes()), "from", index)
 
-	if len(c.nodeRecData[seq]) == c.threshold {
-		output := crypto.RecoverBeacon(c.nodeRecData[seq], c.threshold)
+	if _, ok := c.nodeConfShares[seq]; !ok {
+		c.nodeConfShares[seq] = make(map[uint64]*ed25519.Point)
+	}
+	c.nodeConfShares[seq][index] = &share
+
+	if len(c.nodeConfShares[seq]) == c.threshold {
+		output := crypto.RecoverBeacon(c.nodeConfShares[seq], c.threshold)
 		c.beacon[seq] = &output
 		log.Info("Beacon output for", "number", seq, "output", hex.EncodeToString(output.Bytes()))
 
