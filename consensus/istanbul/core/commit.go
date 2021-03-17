@@ -21,6 +21,8 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/istanbul"
+	crypto "github.com/ethereum/go-ethereum/crypto"
+	bn256 "github.com/ethereum/go-ethereum/crypto/bn256/cloudflare"
 )
 
 func (c *core) sendCommit(root common.Hash) {
@@ -39,9 +41,16 @@ func (c *core) sendCommitForOldBlock(view *istanbul.View, digest common.Hash) {
 func (c *core) broadcastCommit(sub *istanbul.Subject, root common.Hash) {
 	logger := c.logger.New("state", c.state)
 
+	var pubkeys []*bn256.G2
+
+	for _, value := range c.blspubKeys {
+		pubkeys = append(pubkeys, value)
+	}
+	sig := crypto.BlsSign(pubkeys, &c.blsKey.Skey, &c.blsKey.Mkey, root.Bytes())
 	encodedCommit, err := Encode(&istanbul.Commit{
 		Sub:  sub,
 		Root: root,
+		Sign: sig,
 	})
 	if err != nil {
 		logger.Error("Failed to encode", "commit", "in boradcastCommit")
@@ -64,6 +73,7 @@ func (c *core) broadcastCommit(sub *istanbul.Subject, root common.Hash) {
 }
 
 func (c *core) handleCommit(msg *message, src istanbul.Validator) error {
+
 	// Decode COMMIT message
 	var commit *istanbul.Commit
 	err := msg.Decode(&commit)
@@ -90,10 +100,12 @@ func (c *core) handleCommit(msg *message, src istanbul.Validator) error {
 		// phase of the protocol!
 		// It might be easier to start the reconstruction somewhere else
 		// as such a design will keep the consensus layer intact!
-
 		// Still need to call LockHash here since state can skip Prepared state and jump directly to the Committed state.
 		c.current.LockHash()
-		c.commit(commit.Sub.View.Sequence.Uint64(), commit.Sub.Digest)
+
+		nodelist, aggpk, aggsign := c.GenerateAggSig() // use c.current.Commits.Values() for list of msg and msg.Address() for address
+
+		c.commit(commit.Sub.View.Sequence.Uint64(), commit.Sub.Digest, nodelist, aggpk, aggsign)
 	}
 
 	return nil
@@ -139,4 +151,24 @@ func (c *core) acceptCommit(msg *message, src istanbul.Validator) error {
 	}
 
 	return nil
+}
+
+func (c *core) GenerateAggSig() ([]int, *bn256.G2, *bn256.G1) {
+
+	var nodelist []int
+	var aggpk *bn256.G2
+	var aggsig *bn256.G1
+	var SignList []*bn256.G1
+	var PkList []*bn256.G2
+	for _, msg := range c.current.Commits.Values() {
+		var commit *istanbul.Commit
+		_ = msg.Decode(&commit)
+		SignList = append(SignList, commit.Sign)
+		PkList = append(PkList, c.blspubKeys[msg.Address])
+		nodelist = append(nodelist, c.addrIDMap[msg.Address])
+	}
+	aggpk, aggsig = crypto.SignAggregator(PkList, SignList)
+
+	return nodelist, aggpk, aggsig
+
 }

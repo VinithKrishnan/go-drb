@@ -30,6 +30,8 @@ var (
 	// errFutureMessage is returned when current view is earlier than the
 	// view of the received message.
 	errFutureMessage = errors.New("future message")
+
+	errInvalidMultiSig = errors.New("Returned MultiSig is invalid")
 	// errOldMessage is returned when the received message's view is earlier
 	// than current view.
 	errOldMessage = errors.New("old message")

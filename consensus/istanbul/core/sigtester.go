@@ -1,27 +1,10 @@
-// Copyright 2017 The go-ethereum Authors
-// This file is part of the go-ethereum library.
-//
-// The go-ethereum library is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// The go-ethereum library is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-// GNU Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public License
-// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
-
-package core
+package main
 
 import (
 	"encoding/hex"
 	"math/big"
 	"reflect"
 	"strconv"
-	"testing"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -44,11 +27,6 @@ var edKey types.EdKey
 var blsKey types.BLSKey
 var logdir string
 
-// "0xd1589d31c6674d5540be85baf60850bd39752e40"
-// "0x9cc76c660e8679241090e69a967d17ea236e5bd3"
-// "0x82ba6627a3453997fc46730e8dd54798f0253f00"
-
-// "0x1d40498b6c909a40cba517e94f37692d54ea604f"
 
 func init() {
 	pkPath := "pubkey.json"
@@ -132,24 +110,9 @@ func init() {
 
 }
 
-func makeBlock(number int64) *types.Block {
-	header := &types.Header{
-		Difficulty: big.NewInt(0),
-		Number:     big.NewInt(number),
-		GasLimit:   0,
-		GasUsed:    0,
-		Time:       0,
-	}
-	block := &types.Block{}
-	return block.WithSeal(header)
-}
 
-func newTestProposal() istanbul.Proposal {
-	return makeBlock(1)
-}
-
-
-func TestBLSSign(t *testing.T) {
+func TestBLSSign() {
+	init()
 	var pubkeys []*bn256.G2
 
 	for _, value := range blspubKeys {
@@ -158,53 +121,6 @@ func TestBLSSign(t *testing.T) {
 	sig := crypto.BlsSign(pubkeys, &blsKey.Skey, &blsKey.Mkey, root.Bytes())
 }
 
-func TestNewRequest(t *testing.T) {
-	testLogger.SetHandler(elog.StdoutHandler)
-
-	N := uint64(4)
-	F := uint64(1)
-
-	sys := NewTestSystemWithBackend(N, F)
-
-	close := sys.Run(true)
-	defer close()
-
-	request1 := makeBlock(1)
-	sys.backends[0].NewRequest(request1)
-
-	<-time.After(1 * time.Second)
-
-	request2 := makeBlock(2)
-	sys.backends[0].NewRequest(request2)
-
-	<-time.After(1 * time.Second)
-
-	for _, backend := range sys.backends {
-		if len(backend.committedMsgs) != 2 {
-			t.Errorf("the number of executed requests mismatch: have %v, want 2", len(backend.committedMsgs))
-		}
-		if !reflect.DeepEqual(request1.Number(), backend.committedMsgs[0].commitProposal.Number()) {
-			t.Errorf("the number of requests mismatch: have %v, want %v", request1.Number(), backend.committedMsgs[0].commitProposal.Number())
-		}
-		if !reflect.DeepEqual(request2.Number(), backend.committedMsgs[1].commitProposal.Number()) {
-			t.Errorf("the number of requests mismatch: have %v, want %v", request2.Number(), backend.committedMsgs[1].commitProposal.Number())
-		}
-	}
-}
-
-func TestQuorumSize(t *testing.T) {
-	N := uint64(4)
-	F := uint64(1)
-
-	sys := NewTestSystemWithBackend(N, F)
-	backend := sys.backends[0]
-	c := backend.engine.(*core)
-
-	valSet := c.valSet
-	for i := 1; i <= 1000; i++ {
-		valSet.AddValidator(common.StringToAddress(string(i)))
-		if 2*c.QuorumSize() <= (valSet.Size()+valSet.F()) || 2*c.QuorumSize() > (valSet.Size()+valSet.F()+2) {
-			t.Errorf("quorumSize constraint failed, expected value (2*QuorumSize > Size+F && 2*QuorumSize <= Size+F+2) to be:%v, got: %v, for size: %v", true, false, valSet.Size())
-		}
-	}
+func main() {
+	TestBLSSign()
 }

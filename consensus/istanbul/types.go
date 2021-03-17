@@ -22,6 +22,7 @@ import (
 	"io"
 	"math/big"
 
+	bn256 "github.com/ethereum/go-ethereum/crypto/bn256/cloudflare"
 	ed25519 "github.com/ethereum/go-ethereum/filippo.io/edwards25519"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -117,6 +118,7 @@ type Prepare struct {
 type Commit struct {
 	Sub  *Subject
 	Root common.Hash
+	Sign *bn256.G1
 	//@Vinith : add sig on hash here
 }
 
@@ -139,9 +141,16 @@ type MerklePath struct {
 	Placeholder string
 }
 
+type CommitCert struct {
+	Nodelist []int
+	Aggpk    *bn256.G2
+	Aggsig   *bn256.G1
+}
+
 type MultiSig struct {
 	Seq  uint64
 	Root common.Hash
+	Sig  CommitCert
 }
 
 type NodeData struct {
@@ -214,10 +223,11 @@ func MerklePathEncode(seq uint64, message string) MerklePath {
 	}
 }
 
-func MultiSigEncode(seq uint64, root common.Hash) MultiSig {
+func MultiSigEncode(seq uint64, root common.Hash, sig CommitCert) MultiSig {
 	return MultiSig{
 		Seq:  seq,
 		Root: root,
+		Sig:  sig,
 	}
 }
 

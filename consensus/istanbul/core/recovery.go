@@ -8,6 +8,8 @@ import (
 	"strconv"
 
 	"github.com/ethereum/go-ethereum/common"
+	crypto "github.com/ethereum/go-ethereum/crypto"
+	bn256 "github.com/ethereum/go-ethereum/crypto/bn256/cloudflare"
 	"github.com/ethereum/go-ethereum/log"
 	// "github.com/ethereum/go-ethereum/consensus/istanbul"
 	// "github.com/ethereum/go-ethereum/crypto/ed25519"
@@ -124,7 +126,7 @@ func (c *core) handleReqMultiSig(msg *message, src istanbul.Validator) error {
 
 	//@Vinith: Use Node Agg Data to get merkle root
 
-	msigData := istanbul.MultiSigEncode(rSeq, c.nodeDecidedRoot[rSeq])
+	msigData := istanbul.MultiSigEncode(rSeq, c.nodeDecidedRoot[rSeq], c.nodeDecidedCommitCert[rSeq])
 	msig, err := Encode(&msigData)
 
 	if err != nil {
@@ -239,6 +241,19 @@ func (c *core) handleMultiSig(msg *message, src istanbul.Validator) error {
 
 	log.Debug("Root added and notified!", rSeq)
 	c.nodeDecidedRoot[rSeq] = rRoot
+
+	// musltig verification up ahead
+
+	var pubkeys []*bn256.G2
+
+	for _, value := range c.blspubKeys {
+		pubkeys = append(pubkeys, value)
+	}
+
+	apk, _ := crypto.KeyAgg(pubkeys)
+	if !crypto.Verify(rmsg.Sig.Nodelist, apk, rRoot.Bytes(), rmsg.Sig.Aggpk, rmsg.Sig.Aggsig) {
+		return errInvalidMultiSig
+	}
 
 	// Beacon output already available, no need to process further
 	if _, rok := c.beacon[rSeq]; rok {

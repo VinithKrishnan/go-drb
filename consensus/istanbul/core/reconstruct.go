@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 
+	// "github.com/cloudflare/bn256"
 	"github.com/ethereum/go-ethereum/consensus/istanbul"
 	"github.com/ethereum/go-ethereum/crypto"
 
@@ -32,10 +33,9 @@ import (
 
 // sendReconstruct sends a reconstruction message for a particular view
 func (c *core) sendReconstruct(seq uint64, digest common.Hash) {
-	c.nodeMu.Lock()
+	c.nodeMu.RLock()
 	aData, ok := c.nodeAggData[seq]
-	c.nodeDecidedRoot[seq] = digest
-	c.nodeMu.Unlock()
+	c.nodeMu.RUnlock()
 	if ok {
 		index := c.addrIDMap[c.Address()]
 		aCommit := aData.Points[index]
