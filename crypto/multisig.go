@@ -1,17 +1,13 @@
 package crypto
 
-
 import (
+	// "github.com/consensys/gurvy/bn256"
 	"crypto/rand"
 	"crypto/sha256"
 	"fmt"
-
-	// bn256 "github.com/ethereum/go-ethereum/crypto/bn256/cloudflare"
-
-	// bn256 "github.com/consensys/gurvy/bn256"
 	"math/big"
-	bn256 "./bn256/cloudflare"
-	// bn256 "github.com/ethereum/go-ethereum/crypto/bn256/cloudflare"
+
+	bn256 "github.com/ethereum/go-ethereum/crypto/bn256/cloudflare"
 
 	// "reflect"
 	"bytes"
@@ -161,69 +157,69 @@ func Verify(nodelist []int, apk *bn256.G2, message []byte, aggpk *bn256.G2, aggs
 
 }
 
-func main() {
-	// var pklist [] *bn256.G2
-	// for i:=0;i<3;i++ {
-	// 	_,pk := KeyGen()
-	// 	pklist = append(pklist,pk)
-	// }
-	// // fmt.Println(g1,g2)
+// func main() {
+// 	// var pklist [] *bn256.G2
+// 	// for i:=0;i<3;i++ {
+// 	// 	_,pk := KeyGen()
+// 	// 	pklist = append(pklist,pk)
+// 	// }
+// 	// // fmt.Println(g1,g2)
 
-	// fmt.Println(KeyAgg(pklist))
-	// fmt.Println(new(bn256.G2).ScalarBaseMult(bigFromBase10("0")))
-	// fmt.Println(new(bn256.G2).ScalarMult(tempG2,bigFromBase10("0")))
-	// fmt.Println(new(bn256.G2).ScalarMult(tempG2,bigFromBase10("0")))
+// 	// fmt.Println(KeyAgg(pklist))
+// 	// fmt.Println(new(bn256.G2).ScalarBaseMult(bigFromBase10("0")))
+// 	// fmt.Println(new(bn256.G2).ScalarMult(tempG2,bigFromBase10("0")))
+// 	// fmt.Println(new(bn256.G2).ScalarMult(tempG2,bigFromBase10("0")))
 
-	GroupSetup()
-	var SignList []*bn256.G1
-	message := []byte{byte(0)}
-	for i, sk := range SecretKeys {
-		SignList = append(SignList, Sign(PublicKeys, sk, MemKeys[i], message))
-	}
-	AggPk, AggSign := SignAggregator(PublicKeys, SignList)
-	nodelist := []int{1, 2, 3}
-	apk, _ := KeyAgg(PublicKeys)
-	fmt.Println(Verify(nodelist, apk, message, AggPk, AggSign))
-	// fmt.Println(MemKeys)
+// 	GroupSetup()
+// 	var SignList []*bn256.G1
+// 	message := []byte{byte(0)}
+// 	for i, sk := range SecretKeys {
+// 		SignList = append(SignList, Sign(PublicKeys, sk, MemKeys[i], message))
+// 	}
+// 	AggPk, AggSign := SignAggregator(PublicKeys, SignList)
+// 	nodelist := []int{1, 2, 3}
+// 	apk, _ := KeyAgg(PublicKeys)
+// 	fmt.Println(Verify(nodelist, apk, message, AggPk, AggSign))
+// 	// fmt.Println(MemKeys)
 
-	// sk,pk,_ := bn256.RandomG2(rand.Reader)
-	// fmt.Println(pk)
-	// fmt.Println(new(bn256.G2).ScalarMult(tempG2,sk))
+// 	// sk,pk,_ := bn256.RandomG2(rand.Reader)
+// 	// fmt.Println(pk)
+// 	// fmt.Println(new(bn256.G2).ScalarMult(tempG2,sk))
 
-	// a, _ := rand.Int(rand.Reader, bn256.Order)
-	// b, _ := rand.Int(rand.Reader, bn256.Order)
-	// c, _ := rand.Int(rand.Reader, bn256.Order)
+// 	// a, _ := rand.Int(rand.Reader, bn256.Order)
+// 	// b, _ := rand.Int(rand.Reader, bn256.Order)
+// 	// c, _ := rand.Int(rand.Reader, bn256.Order)
 
-	// pa, pb, pc := new(bn256.G1), new(bn256.G1), new(bn256.G1)
-	// qa, qb, qc := new(bn256.G2), new(bn256.G2), new(bn256.G2)
+// 	// pa, pb, pc := new(bn256.G1), new(bn256.G1), new(bn256.G1)
+// 	// qa, qb, qc := new(bn256.G2), new(bn256.G2), new(bn256.G2)
 
-	// // pa.Unmarshal(new(bn256.G1).ScalarBaseMult(a).Marshal())
-	// // qa.Unmarshal(new(bn256.G2).ScalarBaseMult(a).Marshal())
-	// // pb.Unmarshal(new(bn256.G1).ScalarBaseMult(b).Marshal())
-	// // qb.Unmarshal(new(bn256.G2).ScalarBaseMult(b).Marshal())
-	// // pc.Unmarshal(new(bn256.G1).ScalarBaseMult(c).Marshal())
-	// // qc.Unmarshal(new(bn256.G2).ScalarBaseMult(c).Marshal())
+// 	// // pa.Unmarshal(new(bn256.G1).ScalarBaseMult(a).Marshal())
+// 	// // qa.Unmarshal(new(bn256.G2).ScalarBaseMult(a).Marshal())
+// 	// // pb.Unmarshal(new(bn256.G1).ScalarBaseMult(b).Marshal())
+// 	// // qb.Unmarshal(new(bn256.G2).ScalarBaseMult(b).Marshal())
+// 	// // pc.Unmarshal(new(bn256.G1).ScalarBaseMult(c).Marshal())
+// 	// // qc.Unmarshal(new(bn256.G2).ScalarBaseMult(c).Marshal())
 
-	// pa = (new(bn256.G1).ScalarBaseMult(a))
-	// qa = (new(bn256.G2).ScalarBaseMult(a))
-	// pb = (new(bn256.G1).ScalarBaseMult(b))
-	// qb = (new(bn256.G2).ScalarBaseMult(b))
-	// pc = (new(bn256.G1).ScalarBaseMult(c))
-	// qc = (new(bn256.G2).ScalarBaseMult(c))
+// 	// pa = (new(bn256.G1).ScalarBaseMult(a))
+// 	// qa = (new(bn256.G2).ScalarBaseMult(a))
+// 	// pb = (new(bn256.G1).ScalarBaseMult(b))
+// 	// qb = (new(bn256.G2).ScalarBaseMult(b))
+// 	// pc = (new(bn256.G1).ScalarBaseMult(c))
+// 	// qc = (new(bn256.G2).ScalarBaseMult(c))
 
-	// k1 := bn256.Pair(pb, qc)
-	// k1.ScalarMult(k1, a)
-	// k1Bytes := k1.Marshal()
+// 	// k1 := bn256.Pair(pb, qc)
+// 	// k1.ScalarMult(k1, a)
+// 	// k1Bytes := k1.Marshal()
 
-	// k2 := bn256.Pair(pc, qa)
-	// k2.ScalarMult(k2, b)
-	// k2Bytes := k2.Marshal()
+// 	// k2 := bn256.Pair(pc, qa)
+// 	// k2.ScalarMult(k2, b)
+// 	// k2Bytes := k2.Marshal()
 
-	// k3 := bn256.Pair(pa, qb)
-	// k3.ScalarMult(k3, c)
-	// k3Bytes := k3.Marshal()
+// 	// k3 := bn256.Pair(pa, qb)
+// 	// k3.ScalarMult(k3, c)
+// 	// k3Bytes := k3.Marshal()
 
-	// if !bytes.Equal(k1Bytes, k2Bytes) || !bytes.Equal(k2Bytes, k3Bytes) {
-	// 	fmt.Println("keys didn't agree")
-	// }
-}
+// 	// if !bytes.Equal(k1Bytes, k2Bytes) || !bytes.Equal(k2Bytes, k3Bytes) {
+// 	// 	fmt.Println("keys didn't agree")
+// 	// }
+// }
