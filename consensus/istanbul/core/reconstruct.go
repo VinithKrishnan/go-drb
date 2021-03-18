@@ -25,17 +25,30 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/istanbul"
 	"github.com/ethereum/go-ethereum/crypto"
 
+	// bn256 "github.com/ethereum/go-ethereum/crypto/bn256/cloudflare"
+
 	// "github.com/ethereum/go-ethereum/crypto/ed25519"
 	"github.com/ethereum/go-ethereum/common"
 	ed25519 "github.com/ethereum/go-ethereum/filippo.io/edwards25519"
 	"github.com/ethereum/go-ethereum/log"
 )
 
+// func (c *core) updateDecidedValues(seq uint64,digest common.Hash) {
+
+// }
 // sendReconstruct sends a reconstruction message for a particular view
 func (c *core) sendReconstruct(seq uint64, digest common.Hash) {
-	c.nodeMu.RLock()
+	c.nodeMu.Lock() // @Vinith:should i move this to commit()?
 	aData, ok := c.nodeAggData[seq]
-	c.nodeMu.RUnlock()
+	nodelist, aggpk, aggsign := c.GenerateAggSig() // use c.current.Commits.Values() for list of msg and msg.Address() for address
+	c.nodeDecidedCommitCert[seq] = &istanbul.CommitCert{
+		Nodelist: nodelist,
+		Aggpk:    aggpk.Marshal(),
+		Aggsig:   aggsign.Marshal(),
+	}
+	c.nodeDecidedRoot[seq] = digest
+	log.Info("Deciding commit cert", "Seq", seq, "nodelist", nodelist, "roothash in bytes", digest.Bytes(), "aggpk", aggpk, "aggsig", aggsign)
+	c.nodeMu.Unlock()
 	if ok {
 		index := c.addrIDMap[c.Address()]
 		aCommit := aData.Points[index]
@@ -58,6 +71,8 @@ func (c *core) sendReconstruct(seq uint64, digest common.Hash) {
 			Msg:  reconstruct,
 		})
 		log.Info("Broadcast recontstuction message", "number", seq)
+	} else {
+		log.Info("No private message received from leader yet.")
 	}
 }
 

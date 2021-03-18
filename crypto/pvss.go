@@ -8,10 +8,12 @@ import (
 	"errors"
 	"math/big"
 
-	rnd "math/rand" 
+	rnd "math/rand"
 
 	"github.com/ethereum/go-ethereum/common"
 	ed25519 "github.com/ethereum/go-ethereum/filippo.io/edwards25519"
+
+	// ed25519 "github.com/ethereum/go-ethereum/crypto/edwards25519"
 	"github.com/ethereum/go-ethereum/log"
 )
 
@@ -378,7 +380,7 @@ func VerifyShares(proofs NizkProofs, pubKeys Points, total, ths int) bool {
 	}
 	product := ed25519.NewIdentityPoint().VarTimeMultiScalarMult(codeword, commitments)
 	return product.Equal(ONE) == 1
-	return true
+	// return true
 }
 
 // AggregateCommit aggregates polynomial commitment

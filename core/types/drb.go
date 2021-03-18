@@ -21,7 +21,7 @@ type EdStringKey struct {
 
 // StringKey is a secret key in the string format
 type BLSStringKey struct {
-	Mkey string `json:"mkey"`
+	Mkey string `json:"memkey"`
 	Skey string `json:"skey"`
 }
 
@@ -88,8 +88,10 @@ func EdStringToKey(strKey EdStringKey) EdKey {
 func BLSStringToKey(strKey BLSStringKey) BLSKey {
 	bMkey, err1 := hex.DecodeString(strKey.Mkey)
 	bSkey, err2 := hex.DecodeString(strKey.Skey)
-	var mkey *bn256.G1
+	mkey := new(bn256.G1)
+	log.Info("BLSStringKey", "bmKey", bMkey)
 	_, err3 := mkey.Unmarshal(bMkey)
+	log.Info("BLSStringKey", "mKey", *mkey)
 	skey := new(big.Int).SetBytes(bSkey)
 
 	if err1 != nil {

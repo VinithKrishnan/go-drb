@@ -7,6 +7,8 @@ import (
 
 	"strconv"
 
+	// "github.com/ethereum/go-ethereum/crypto/ed25519"
+
 	"github.com/ethereum/go-ethereum/common"
 	crypto "github.com/ethereum/go-ethereum/crypto"
 	bn256 "github.com/ethereum/go-ethereum/crypto/bn256/cloudflare"
@@ -112,6 +114,7 @@ func (c *core) handleReqMerklePath(msg *message, src istanbul.Validator) error {
 
 // handleReqMultiSig sends MultiSig
 func (c *core) handleReqMultiSig(msg *message, src istanbul.Validator) error {
+	log.Info("Inside handleReqMultiSig ")
 	index := c.getIndex(src.Address())
 	log.Debug("Handling req for Multisig message from", "addr", src.Address(), "index", index)
 
@@ -124,15 +127,27 @@ func (c *core) handleReqMultiSig(msg *message, src istanbul.Validator) error {
 
 	rSeq := rmsg.Seq
 
+	c.nodeMu.RLock()
 	//@Vinith: Use Node Agg Data to get merkle root
+	if _, ok := c.nodeDecidedRoot[rSeq]; !ok {
+		log.Error("No decided root")
+	}
+	log.Info("Decided Root", "value", c.nodeDecidedRoot[rSeq])
 
-	msigData := istanbul.MultiSigEncode(rSeq, c.nodeDecidedRoot[rSeq], c.nodeDecidedCommitCert[rSeq])
+	if _, ok := c.nodeDecidedCommitCert[rSeq]; !ok {
+		log.Error("No decided CommitCert")
+	}
+
+	log.Info("Decided Cert", "value", *c.nodeDecidedCommitCert[rSeq])
+
+	msigData := istanbul.MultiSigEncode(rSeq, c.nodeDecidedRoot[rSeq], *c.nodeDecidedCommitCert[rSeq])
 	msig, err := Encode(&msigData)
 
 	if err != nil {
-		log.Error("Failed to encode MultiSig", "number", rSeq)
+		log.Error("Failed to encode MultiSig", "error", err, "seq", rSeq, "root", c.nodeDecidedRoot[rSeq], "commitcert", c.nodeDecidedCommitCert[rSeq])
 		return errFailedEncodeMultiSig
 	}
+	c.nodeMu.RUnlock()
 
 	c.sendToNode(src.Address(), &message{
 		Code: msgMultiSig,
@@ -251,8 +266,27 @@ func (c *core) handleMultiSig(msg *message, src istanbul.Validator) error {
 	}
 
 	apk, _ := crypto.KeyAgg(pubkeys)
-	if !crypto.Verify(rmsg.Sig.Nodelist, apk, rRoot.Bytes(), rmsg.Sig.Aggpk, rmsg.Sig.Aggsig) {
-		return errInvalidMultiSig
+	aggkey := new(bn256.G2)
+	_, err1 := aggkey.Unmarshal(rmsg.Sig.Aggpk)
+	if err1 != nil {
+		log.Error("aggpk not unmarshable")
+	}
+	aggsig := new(bn256.G1)
+	_, err2 := aggsig.Unmarshal(rmsg.Sig.Aggsig)
+
+	if err2 != nil {
+		log.Error("aggsig not unmarshable")
+	}
+	var nodelist []int
+	for _, value := range rmsg.Sig.Nodelist {
+		nodelist = append(nodelist, int(value))
+	}
+	if !crypto.Verify(nodelist, apk, rRoot.Bytes(), aggkey, aggsig) {
+		log.Error("Invalid Multisig")
+		log.Info("the recieved values are as follows", "seq", rSeq, "nodelist", nodelist, "apk", apk, "roothash in bytes", rRoot.Bytes(), "aggkey", aggkey, "aggsig", aggsig)
+		// return errInvalidMultiSig
+	} else {
+		log.Info("Valid multisig received")
 	}
 
 	// Beacon output already available, no need to process further
@@ -267,7 +301,7 @@ func (c *core) handleMultiSig(msg *message, src istanbul.Validator) error {
 	// 	return errInconsistentMultiSig
 	// }
 
-	go c.sendReconstruct(rSeq, rRoot)
+	// go c.sendReconstruct(rSeq, rRoot)  @vinith uncomment this
 
 	c.addReconstruct(rSeq, index, share)
 

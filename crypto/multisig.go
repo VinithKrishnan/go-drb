@@ -4,7 +4,6 @@ import (
 	// "github.com/consensys/gurvy/bn256"
 	"crypto/rand"
 	"crypto/sha256"
-	"fmt"
 	"math/big"
 
 	bn256 "github.com/ethereum/go-ethereum/crypto/bn256/cloudflare"
@@ -66,7 +65,7 @@ func MemKeySetup(apk *bn256.G2, exponents []*big.Int, SecretKeys []*big.Int) []*
 		p1 := bn256.Pair(memkey_j, new(bn256.G2).ScalarBaseMult(bigFromBase10("1"))).Marshal()
 		p2 := bn256.Pair(digest, apk).Marshal()
 		if !bytes.Equal(p1, p2) {
-			fmt.Println("Membership Key Setup failed")
+			// fmt.Println("Membership Key Setup failed")
 		}
 		MbKeys = append(MbKeys, memkey_j)
 	}
@@ -150,7 +149,7 @@ func Verify(nodelist []int, apk *bn256.G2, message []byte, aggpk *bn256.G2, aggs
 	prhs := bn256.Pair(aggsig, new(bn256.G2).ScalarBaseMult(bigFromBase10("1"))).Marshal()
 
 	if !bytes.Equal(plhs, prhs) {
-		fmt.Println("Signature verification failed")
+		// fmt.Println("Signature verification failed")
 		return false
 	}
 	return true

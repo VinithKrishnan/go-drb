@@ -75,7 +75,7 @@ func New(backend istanbul.Backend, config *istanbul.Config) Engine {
 		nodeRecData:           make(map[uint64]map[uint64]*crypto.RecData),
 		nodeDecidedRoot:       make(map[uint64]common.Hash),
 		nodeConfShares:        make(map[uint64]map[uint64]*ed25519.Point),
-		nodeDecidedCommitCert: make(map[uint64]istanbul.CommitCert),
+		nodeDecidedCommitCert: make(map[uint64]*istanbul.CommitCert),
 		beacon:                make(map[uint64]*ed25519.Point),
 		penAggData:            make(map[common.Hash]*crypto.NodeData),
 		penIndexSets:          make(map[common.Hash][]common.Address),
@@ -141,7 +141,7 @@ type core struct {
 	beacon                map[uint64]*ed25519.Point             // height: beacon-output
 	nodeDecidedRoot       map[uint64]common.Hash                // height:Decided root
 	nodeConfShares        map[uint64]map[uint64]*ed25519.Point  // height: {index:share} @Vinith:Redundant data, can optimize
-	nodeDecidedCommitCert map[uint64]istanbul.CommitCert        // height:  CommitCert
+	nodeDecidedCommitCert map[uint64]*istanbul.CommitCert       // height:  CommitCert
 
 	backend               istanbul.Backend
 	events                *event.TypeMuxSubscription
@@ -176,6 +176,8 @@ type core struct {
 }
 
 func (c *core) InitKeys(vals []common.Address) error {
+
+	log.Info("Init keys has been called")
 	// Initializing the public keys
 	pkPath := "pubkey.json"
 	blspkPath := "blspubkey.json"
@@ -215,9 +217,10 @@ func (c *core) InitKeys(vals []common.Address) error {
 		c.addrIDMap[val] = i
 		c.idAddrMap[i] = val
 		c.pubKeys[val] = types.EdStringToPoint(ednodelist[i])
+		log.Info("Initializing pkeys", "addr", val, "idx", i)
 		c.blspubKeys[val] = types.G2StringToPoint(blspknodelist[i])
 		c.blsmemkeys[val] = types.G1StringToPoint(blsmknodelist[i])
-		log.Trace("Initializing pkeys", "addr", val, "idx", i)
+
 	}
 
 	c.position = c.addrIDMap[c.address]
@@ -230,18 +233,58 @@ func (c *core) InitKeys(vals []common.Address) error {
 	}
 	// log.Info("String Key is:", strKey)
 	c.edKey = types.EdStringToKey(edstrKey)
-	log.Debug("Initializing local key", "addr", c.address, "pkey", edstrKey.Pkey)
-	return nil
+	log.Info("Initializing local key", "addr", c.address, "pkey", edstrKey.Pkey)
 
 	var BLSstrKey types.BLSStringKey
 	if err := common.LoadJSON(blskeyPath, &BLSstrKey); err != nil {
 		log.Error("Can't load node file", "path", blskeyPath, "error", err)
 		return err
 	}
-	// log.Info("String Key is:", strKey)
+	log.Info("String Key is:", BLSstrKey)
 	c.blsKey = types.BLSStringToKey(BLSstrKey)
-	log.Debug("Initializing local key", "addr", c.address, "pkey", BLSstrKey.Mkey)
+	log.Info("Initializing local key", "addr", c.address, "mkey", c.blsKey.Mkey, "skey", c.blsKey.Skey)
 	return nil
+
+}
+
+func (c *core) GenerateAggSig() ([]uint64, *bn256.G2, *bn256.G1) {
+	log.Info("Inside GenerateAggsig")
+	var nodelist []uint64
+	var aggpk *bn256.G2
+	var aggsig *bn256.G1
+	var SignList []*bn256.G1
+	var PkList []*bn256.G2
+	// var root common.Hash
+	for _, msg := range c.current.Commits.Values() {
+		var commit *istanbul.Commit
+		err := msg.Decode(&commit)
+		// root = commit.Root
+		if err != nil {
+			log.Error("Failed to decode stored commit message")
+		}
+		sig := new(bn256.G1)
+		_, err = sig.Unmarshal(commit.Sign)
+		if err != nil {
+			log.Error("Unable to unmarshal commit sign")
+		}
+		// log.Info("commit sign is", "value:", sig)
+		SignList = append(SignList, sig)
+		PkList = append(PkList, c.blspubKeys[msg.Address])
+		nodelist = append(nodelist, uint64(c.addrIDMap[msg.Address]+1))
+	}
+
+	aggpk, aggsig = crypto.SignAggregator(PkList, SignList)
+
+	// apk, _ := crypto.KeyAgg(PkList)
+	// var intnodelist []int
+	// for _, value := range nodelist {
+	// 	intnodelist = append(intnodelist, int(value))
+	// }
+	// if !crypto.Verify(intnodelist, apk, root.Bytes(), aggpk, aggsig) {
+	// 	log.Error("Multisig generation failed")
+
+	// }
+	return nodelist, aggpk, aggsig
 
 }
 
@@ -350,7 +393,7 @@ func (c *core) IsCurrentProposal(blockHash common.Hash) bool {
 	return c.current != nil && c.current.pendingRequest != nil && c.current.pendingRequest.Proposal.Hash() == blockHash
 }
 
-func (c *core) commit(seq uint64, digest common.Hash, nodelist []int, aggpk *bn256.G2, aggsig *bn256.G1) {
+func (c *core) commit(seq uint64, digest common.Hash) {
 	c.setState(StateCommitted)
 
 	proposal := c.current.Proposal()
@@ -367,17 +410,9 @@ func (c *core) commit(seq uint64, digest common.Hash, nodelist []int, aggpk *bn2
 		}
 
 		if seq > c.startSeq {
-			c.nodeMu.Lock()
-			c.nodeDecidedCommitCert[seq] = istanbul.CommitCert{
-				Nodelist: nodelist,
-				Aggpk:    aggpk,
-				Aggsig:   aggsig,
-			}
-			c.nodeDecidedRoot[seq] = digest
-			c.nodeMu.Unlock()
 
 			go c.sendReconstruct(seq, digest)
-			log.Info("Sent reconstruction message")
+			// log.Info("Sent reconstruction message")
 		}
 		fintime := c.logdir + "fintime"
 		fintimef, err := os.OpenFile(fintime, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
