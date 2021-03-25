@@ -38,22 +38,25 @@ import (
 // }
 // sendReconstruct sends a reconstruction message for a particular view
 func (c *core) sendReconstruct(seq uint64, digest common.Hash) {
+	nodelist, aggpk, aggsign := c.GenerateAggSig()
+	aggpkbytes := aggpk.Marshal()
+	aggsigbytes := aggsign.Marshal()
 	c.nodeMu.Lock() // @Vinith:should i move this to commit()?
 	aData, ok := c.nodeAggData[seq]
-	nodelist, aggpk, aggsign := c.GenerateAggSig() // use c.current.Commits.Values() for list of msg and msg.Address() for address
+
 	c.nodeDecidedCommitCert[seq] = &istanbul.CommitCert{
 		Nodelist: nodelist,
-		Aggpk:    aggpk.Marshal(),
-		Aggsig:   aggsign.Marshal(),
+		Aggpk:    aggpkbytes,
+		Aggsig:   aggsigbytes,
 	}
 	c.nodeDecidedRoot[seq] = digest
-	log.Info("Deciding commit cert", "Seq", seq, "nodelist", nodelist, "roothash in bytes", digest.Bytes(), "aggpk", aggpk, "aggsig", aggsign)
 	c.nodeMu.Unlock()
+	log.Info("Deciding commit cert", "Seq", seq, "nodelist", nodelist, "roothash in bytes", digest.Bytes(), "aggpk", aggpk, "aggsig", aggsign)
 	if ok {
 		index := c.addrIDMap[c.Address()]
-		aCommit := aData.Points[index]
+
 		encEval := aData.EncEvals[index] // aggregated encrypted data
-		recData := crypto.ReconstructData(aCommit, encEval, c.edKey.Pkey, c.edKey.Skey)
+		recData := crypto.ReconstructData(encEval, c.edKey.Pkey, c.edKey.Skey)
 
 		recData.Index = uint64(index)
 
@@ -108,27 +111,16 @@ func (c *core) handleReconstruct(msg *message, src istanbul.Validator) error {
 	_, rok := c.nodeDecidedRoot[rSeq]
 	if !rok {
 		log.Error("PrePrepare message not received from leader")
-		go c.SendReqMultiSig(rSeq, src.Address()) // should i make this asynchronous?
+		c.SendReqMultiSig(rSeq, src.Address()) // should i make this synchronous?
+		log.Info("No deadlock in reconstruct.go")
 		return errRootNotDecided
-		// done := false
-		// log.Info("Waiting for private data from leader!")
-		// for {
-		// 	select {
-		// 	// TODO(sourav): We can change this to a bool value indicating
-		// 	// whether the leader sent correct data or not.
-		// 	case mpath := <-c.merklePathCh:
-		// 		if mpath == rSeq {
-		// 			done = true
-		// 		}
-		// 	}
-		// 	if done {
-		// 		break
-		// 	}
-		// }
+
 	}
 
 	aData, aok := c.nodeAggData[rSeq]
 	if !aok {
+		log.Error("Aggregate Data not received from leader")
+		c.SendReqMerklePath(rSeq, src.Address()) // should i make this asynchronous?
 		return errAggDataNotFound
 	}
 

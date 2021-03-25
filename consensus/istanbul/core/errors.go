@@ -77,4 +77,8 @@ var (
 	// errInvalidSigner is returned when the message is signed by a validator different than message sender
 	errInvalidSigner        = errors.New("message not signed by the sender")
 	errInconsistentMultiSig = errors.New("Recieved multisig root not consistent")
+
+	errHandleMerkleProof = errors.New("Failed ot handle merkle proof")
+
+	// var errSendData = errors.New("Unable to send node data")
 )

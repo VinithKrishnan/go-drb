@@ -83,7 +83,7 @@ type Header struct {
 	Time        uint64         `json:"timestamp"        gencodec:"required"`
 	Extra       []byte         `json:"extraData"        gencodec:"required"`
 	RBRoot      common.Hash    `json: "rbHash" 		 gencodec:"required"`
-	IndexSet    []byte         `json:"indexSet"         gencodec:"required"`
+	IndexSet    []uint64       `json:"indexSet"         gencodec:"required"`
 	Commitments [][]byte       `json:"commitments"      gencodec:"required"`
 	EncEvals    [][]byte       `json:"encEvals"      gencodec:"required"`
 	MixDigest   common.Hash    `json:"mixHash"`
@@ -340,7 +340,7 @@ func (b *Block) UncleHash() common.Hash   { return b.header.UncleHash }
 func (b *Block) Extra() []byte            { return common.CopyBytes(b.header.Extra) }
 
 func (b *Block) RBRoot() common.Hash   { return b.header.RBRoot }
-func (b *Block) IndexSet() []byte      { return common.CopyBytes(b.header.IndexSet) }
+func (b *Block) IndexSet() []uint64    { return CopyUint64(b.header.IndexSet) }
 func (b *Block) Commitments() [][]byte { return b.header.Commitments }
 func (b *Block) EncEvals() [][]byte    { return b.header.EncEvals }
 
@@ -350,7 +350,7 @@ func (b *Block) Header() *Header { return CopyHeader(b.header) }
 func (b *Block) Body() *Body { return &Body{b.transactions, b.uncles} }
 
 // UpdateDRB updates DRB fields of the block
-func (b *Block) UpdateDRB(isets []byte, commitments, encEvals [][]byte, root common.Hash) {
+func (b *Block) UpdateDRB(isets []uint64, commitments, encEvals [][]byte, root common.Hash) {
 	b.header.IndexSet = isets
 	b.header.Commitments = commitments
 	b.header.EncEvals = encEvals
@@ -387,6 +387,16 @@ func CalcUncleHash(uncles []*Header) common.Hash {
 		return EmptyUncleHash
 	}
 	return rlpHash(uncles)
+}
+
+func CopyUint64(nums []uint64) []uint64 {
+	if nums == nil {
+		return nil
+	}
+	copiednums := make([]uint64, len(nums))
+	copy(copiednums, nums)
+
+	return copiednums
 }
 
 // WithSeal returns a new block with the data from b but the header replaced with

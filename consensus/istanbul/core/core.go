@@ -78,7 +78,7 @@ func New(backend istanbul.Backend, config *istanbul.Config) Engine {
 		nodeDecidedCommitCert: make(map[uint64]*istanbul.CommitCert),
 		beacon:                make(map[uint64]*ed25519.Point),
 		penAggData:            make(map[common.Hash]*crypto.NodeData),
-		penIndexSets:          make(map[common.Hash][]common.Address),
+		penIndexSets:          make(map[common.Hash][]uint64),
 		penPrivData:           make(map[common.Hash]map[common.Address]*crypto.RoundData),
 	}
 
@@ -131,7 +131,7 @@ type core struct {
 	penRoots     []common.Hash                         // pending roots
 	penData      []map[common.Address]*crypto.NodeData // future usable commitments
 	penAggData   map[common.Hash]*crypto.NodeData      // future usable aggregate data
-	penIndexSets map[common.Hash][]common.Address      // index set of pending aggregated data
+	penIndexSets map[common.Hash][]uint64              // index set of pending aggregated data
 	penPrivData  map[common.Hash]map[common.Address]*crypto.RoundData
 
 	// for other nodes
@@ -179,11 +179,12 @@ func (c *core) InitKeys(vals []common.Address) error {
 
 	log.Info("Init keys has been called")
 	// Initializing the public keys
-	pkPath := "pubkey.json"
-	blspkPath := "blspubkey.json"
-	blsmkPath := "blsmemkey.json"
-	edkeyPath := "key.json"
-	blskeyPath := "blskey.json"
+	homedir := "/mnt/c/Users/VinithKrishnan/drb-expt/"
+	pkPath := homedir + "pubkey.json"
+	blspkPath := homedir + "blspubkey.json"
+	blsmkPath := homedir + "blsmemkey.json"
+	edkeyPath := homedir + "key.json"
+	blskeyPath := homedir + "blskey.json"
 
 	c.logdir = "/home/ubuntu/drb/"
 	if c.local {
@@ -217,7 +218,7 @@ func (c *core) InitKeys(vals []common.Address) error {
 		c.addrIDMap[val] = i
 		c.idAddrMap[i] = val
 		c.pubKeys[val] = types.EdStringToPoint(ednodelist[i])
-		log.Info("Initializing pkeys", "addr", val, "idx", i)
+		// log.Info("Initializing pkeys", "addr", val, "idx", i)
 		c.blspubKeys[val] = types.G2StringToPoint(blspknodelist[i])
 		c.blsmemkeys[val] = types.G1StringToPoint(blsmknodelist[i])
 
@@ -421,6 +422,8 @@ func (c *core) commit(seq uint64, digest common.Hash) {
 		}
 		fmt.Fprintln(fintimef, seq, proposal.RBRoot().Hex(), c.position, c.Now())
 		fintimef.Close()
+
+		log.Info("Committed block in core.go", "number", seq)
 	}
 }
 

@@ -57,7 +57,7 @@ func (c *core) broadcastCommit(sub *istanbul.Subject, root common.Hash) {
 		log.Info("Mkey")
 	}
 
-	// log.Info("root in bytes", "pubkeys", pubkeys, "Skey", c.blsKey.Skey, "Mkey", c.blsKey.Mkey)
+	// log.Info("Commit values", "root", root.Bytes(), "pubkeys", pubkeys, "Skey", c.blsKey.Skey, "Mkey", c.blsKey.Mkey)
 
 	sigbytes := []byte("hello")
 	if sub.View.Sequence.Uint64() > c.startSeq {
@@ -122,7 +122,10 @@ func (c *core) handleCommit(msg *message, src istanbul.Validator) error {
 		// Still need to call LockHash here since state can skip Prepared state and jump directly to the Committed state.
 		c.current.LockHash()
 
+
+		
 		c.commit(commit.Sub.View.Sequence.Uint64(), commit.Sub.Digest)
+		log.Info("Commited new block in commit.go")
 	}
 
 	return nil

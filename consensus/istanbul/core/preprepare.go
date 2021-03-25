@@ -78,7 +78,7 @@ func (c *core) sendPreprepare(request *istanbul.Request) {
 				c.leaderMu.RLock()
 				root = c.penRoots[0]
 				cData := c.penAggData[root]
-				bisets := c.getByteIndexSets(c.penIndexSets[root])
+				bisets := c.penIndexSets[root]
 				commits := istanbul.PointsToBytes(cData.Points)
 				encEvals := istanbul.PointsToBytes(cData.EncEvals)
 				request.Proposal.UpdateDRB(bisets, commits, encEvals, cData.Root)
@@ -286,6 +286,7 @@ func (c *core) aggregate(idx int) {
 	// This function assumes that leaderMu is alreagy locked
 	var (
 		isets  = make([]int, c.threshold)
+		uisets = make([]uint64, c.threshold)
 		aisets = make([]common.Address, c.threshold)
 		data   = make([]*crypto.NodeData, c.threshold)
 	)
@@ -295,6 +296,7 @@ func (c *core) aggregate(idx int) {
 	for addr, nData := range pendings {
 		isets[i] = c.addrIDMap[addr]
 		aisets[i] = addr
+		uisets[i] = uint64(c.addrIDMap[addr])
 		data[i] = nData
 		i++
 	}
@@ -304,7 +306,7 @@ func (c *core) aggregate(idx int) {
 	root := aggData.Root
 	c.penRoots = append(c.penRoots, root)
 	c.penAggData[root] = aggData
-	c.penIndexSets[root] = aisets
+	c.penIndexSets[root] = uisets
 	c.penPrivData[root] = make(map[common.Address]*crypto.RoundData)
 
 	for raddr, ridx := range c.addrIDMap {
@@ -348,10 +350,17 @@ func (c *core) handleAggregate(sender common.Address, aData *crypto.NodeData) er
 	if err := crypto.ValidateCommit(true, aData, c.getPubKeys(), c.numNodes, c.threshold); err != nil {
 		return err
 	}
+	root, _ := crypto.AggrMerkleRoot(aData.IndexSet, aData.Points, aData.EncEvals)
+	log.Info("Handled root", "leader", aData.Root, "follower", root)
+
+	// index := len(aData.IndexSet) + c.addrIDMap[c.Address()]
+
+	// proof := tree.GetProof(index)
 
 	// adding aggregated information to the dictionary
 	c.nodeMu.Lock()
 	c.nodeAggData[aData.Round] = aData
+
 	c.nodeMu.Unlock()
 	log.Info("Handled Aggregate", "number", aData.Round, "root", aData.Root)
 	return nil
@@ -406,6 +415,8 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 	seq := preprepare.View.Sequence.Uint64()
 	round := preprepare.View.Round.Uint64()
 	root = preprepare.Proposal.RBRoot()
+	indexset := preprepare.Proposal.IndexSet()
+
 	if seq > c.startSeq {
 
 		// Create a NodeData using the Preprepare message
@@ -414,6 +425,7 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 			Root:     root,
 			Points:   istanbul.BytesToPoints(preprepare.Proposal.Commitments()),
 			EncEvals: istanbul.BytesToPoints(preprepare.Proposal.EncEvals()),
+			IndexSet: indexset,
 		}
 
 		if err := c.handleAggregate(src.Address(), &aData); err != nil {

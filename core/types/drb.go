@@ -21,7 +21,7 @@ type EdStringKey struct {
 
 // StringKey is a secret key in the string format
 type BLSStringKey struct {
-	Mkey string `json:"memkey"`
+	Mkey string `json:"mkey"`
 	Skey string `json:"skey"`
 }
 

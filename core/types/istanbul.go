@@ -105,7 +105,7 @@ func IstanbulFilteredHeader(h *Header, keepSeal bool) *Header {
 
 	// DRB specific cleanup
 	newHeader.RBRoot = common.Hash{}
-	newHeader.IndexSet = []byte{}
+	newHeader.IndexSet = []uint64{}
 	newHeader.Commitments = [][]byte{}
 	newHeader.EncEvals = [][]byte{}
 

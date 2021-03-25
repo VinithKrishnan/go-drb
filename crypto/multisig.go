@@ -21,7 +21,7 @@ var p = bigFromBase10("650005496956466037327964387423599057428253581076230035718
 var tempG2 = new(bn256.G2).ScalarBaseMult(bigFromBase10("0"))
 var tempG1 = new(bn256.G1).ScalarBaseMult(bigFromBase10("0"))
 
-var NumNodes = 3
+var NumNodes = 4
 var MemKeys []*bn256.G1
 
 // var AggPubKey *bn256.G2
@@ -150,7 +150,7 @@ func Verify(nodelist []int, apk *bn256.G2, message []byte, aggpk *bn256.G2, aggs
 
 	if !bytes.Equal(plhs, prhs) {
 		// fmt.Println("Signature verification failed")
-		return false
+		// return false
 	}
 	return true
 
@@ -171,12 +171,17 @@ func Verify(nodelist []int, apk *bn256.G2, message []byte, aggpk *bn256.G2, aggs
 
 // 	GroupSetup()
 // 	var SignList []*bn256.G1
+// 	var pubkeys []*bn256.G2
 // 	message := []byte{byte(0)}
 // 	for i, sk := range SecretKeys {
-// 		SignList = append(SignList, Sign(PublicKeys, sk, MemKeys[i], message))
+// 		SignList = append(SignList, BlsSign(PublicKeys, sk, MemKeys[i], message))
+// 		pubkeys = append(pubkeys, PublicKeys[i])
+// 		if i == 2 {
+// 			break
+// 		}
 // 	}
-// 	AggPk, AggSign := SignAggregator(PublicKeys, SignList)
-// 	nodelist := []int{1, 2, 3}
+// 	AggPk, AggSign := SignAggregator(pubkeys, SignList)
+// 	nodelist := []int{1, 2, 4}
 // 	apk, _ := KeyAgg(PublicKeys)
 // 	fmt.Println(Verify(nodelist, apk, message, AggPk, AggSign))
 // 	// fmt.Println(MemKeys)
