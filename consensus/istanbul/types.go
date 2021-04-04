@@ -22,12 +22,14 @@ import (
 	"io"
 	"math/big"
 
-	ed25519 "github.com/ethereum/go-ethereum/filippo.io/edwards25519"
-
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	ed25519 "github.com/ethereum/go-ethereum/filippo.io/edwards25519"
+	"github.com/ethereum/go-ethereum/onrik/gomerkle"
+
 	// "github.com/ethereum/go-ethereum/log"
+
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
@@ -41,8 +43,9 @@ type Proposal interface {
 
 	RBRoot() common.Hash
 	Commitments() [][]byte
+	IndexSet() []uint64
 	EncEvals() [][]byte
-	UpdateDRB([]byte, [][]byte, [][]byte, common.Hash)
+	UpdateDRB([]uint64, [][]byte, [][]byte, common.Hash)
 
 	EncodeRLP(w io.Writer) error
 
@@ -108,10 +111,93 @@ type Preprepare struct {
 	Proposal Proposal
 }
 
+type Prepare struct {
+	Sub  *Subject
+	Root common.Hash
+}
+type Commit struct {
+	Sub  *Subject
+	Root common.Hash
+	Sign []byte //*G1
+	//@Vinith : add sig on hash here
+}
+
 // Reconstruct for the reconstruction phase
 type Reconstruct struct {
 	Seq     uint64
 	RecData RecData
+}
+
+type MerkleRecovery struct {
+	Seq      uint64
+	EncProof PathProof
+	EncEval  []byte
+	Root     []byte
+}
+
+type ReqMerklePath struct {
+	Seq uint64
+}
+
+type ReqMultiSig struct {
+	Seq uint64
+}
+
+type MerklePath struct {
+	Seq         uint64
+	Placeholder string
+}
+
+type Proofnode struct {
+	Pos  bool // true is left, false is right
+	Hash []byte
+}
+
+type PathProof struct {
+	Proof []Proofnode
+}
+
+func MerkleProofEncode(MerkleProof gomerkle.MerkleProof) PathProof {
+	sz := len(MerkleProof.Proof)
+	var mproof []Proofnode
+	for i := 0; i < sz; i++ {
+		var node = Proofnode{
+			Pos:  MerkleProof.Proof[i].Pos,
+			Hash: MerkleProof.Proof[i].Hash,
+		}
+		mproof = append(mproof, node)
+	}
+	return PathProof{
+		Proof: mproof,
+	}
+}
+
+func MerkleProofDecode(proof PathProof) gomerkle.MerkleProof {
+	sz := len(proof.Proof)
+	var mproof []gomerkle.Proofnode
+	for i := 0; i < sz; i++ {
+		var node = gomerkle.Proofnode{
+			Pos:  proof.Proof[i].Pos,
+			Hash: proof.Proof[i].Hash,
+		}
+		mproof = append(mproof, node)
+	}
+	return gomerkle.MerkleProof{
+		Proof: mproof,
+	}
+}
+
+// has to be changes to [] byte slice too
+type CommitCert struct {
+	Nodelist []uint64
+	Aggpk    []byte //*G2
+	Aggsig   []byte //*G1
+}
+
+type MultiSig struct {
+	Seq  uint64
+	Root common.Hash
+	Sig  CommitCert
 }
 
 type NodeData struct {
@@ -120,6 +206,7 @@ type NodeData struct {
 	Points   [][]byte
 	EncEvals [][]byte
 	Proofs   []NizkProof
+	IndexSet []uint64
 }
 
 type RoundData struct {
@@ -177,6 +264,28 @@ func RecDataDecode(recData RecData) crypto.RecData {
 		Proof:    getCProof(recData.Proof),
 	}
 }
+func MerklePathEncode(seq uint64, message string) MerklePath {
+	return MerklePath{
+		Seq:         seq,
+		Placeholder: message,
+	}
+}
+
+func MultiSigEncode(seq uint64, root common.Hash, sig CommitCert) MultiSig {
+	return MultiSig{
+		Seq:  seq,
+		Root: root,
+		Sig:  sig,
+	}
+}
+
+func MerklePathDecode(path MerklePath) MerklePath {
+	return path
+}
+
+func MultiSigDecode(root MultiSig) MultiSig {
+	return root
+}
 
 func RoundDataEncode(rData crypto.RoundData) RoundData {
 	proofs := rData.Proofs
@@ -213,6 +322,7 @@ func NodeDataEncode(nData crypto.NodeData) NodeData {
 	total := len(points)
 	encEvals := nData.EncEvals
 	proofs := nData.Proofs
+	indexset := nData.IndexSet
 
 	var (
 		iPoints   = make([][]byte, total)
@@ -232,6 +342,7 @@ func NodeDataEncode(nData crypto.NodeData) NodeData {
 		Points:   iPoints,
 		EncEvals: iEncEvals,
 		Proofs:   iProofs,
+		IndexSet: indexset,
 	}
 	// for i := 0; i < total; i++ {
 	// 	log.Info("pcompare", "cp", hex.EncodeToString(points[i].Bytes()), "ip", hex.EncodeToString(iPoints[i]))
@@ -270,6 +381,7 @@ func NodeDataDecode(nData NodeData) crypto.NodeData {
 	total := len(points)
 	encEvals := nData.EncEvals
 	proofs := nData.Proofs
+	indexset := nData.IndexSet
 
 	var (
 		cPoints   = make([]ed25519.Point, total)
@@ -291,6 +403,7 @@ func NodeDataDecode(nData NodeData) crypto.NodeData {
 		Points:   cPoints,
 		EncEvals: cEncEvals,
 		Proofs:   cProofs,
+		IndexSet: indexset,
 	}
 
 	// for i := 0; i < total; i++ {

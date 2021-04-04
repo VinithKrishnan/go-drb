@@ -12,6 +12,9 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	ed25519 "github.com/ethereum/go-ethereum/filippo.io/edwards25519"
+	"github.com/ethereum/go-ethereum/onrik/gomerkle"
+
+	// ed25519 "github.com/ethereum/go-ethereum/crypto/edwards25519"
 	"github.com/ethereum/go-ethereum/log"
 )
 
@@ -31,6 +34,7 @@ type NodeData struct {
 	Points   Points
 	EncEvals Points
 	Proofs   NizkProofs
+	IndexSet []uint64
 }
 
 // RoundData stores data received from the leader
@@ -177,7 +181,7 @@ func ShareRandomSecret(pubKeys Points, total, ths int, secret *ed25519.Scalar) N
 }
 
 // ReconstructData returns the data for the reconstruction phase
-func ReconstructData(commit, enc, pkey ed25519.Point, skey ed25519.Scalar) RecData {
+func ReconstructData(enc, pkey ed25519.Point, skey ed25519.Scalar) RecData {
 	dec := DecryptShare(enc, skey)
 	chal, res := DleqProve(*H, dec, pkey, enc, skey)
 	return RecData{
@@ -373,14 +377,16 @@ func VerifyShares(proofs NizkProofs, pubKeys Points, total, ths int) bool {
 	// 2. verify the validity of the shares by sampling and testing with a random codeword
 	codeword := RandomCodeword(total, ths)
 	var commitments = make([]*ed25519.Point, total)
-	for i := 1; i < total; i++ {
+	for i := 0; i < total; i++ {
 		commitments[i] = ed25519.NewIdentityPoint().Set(&proofs[i].Commit)
 	}
 	product := ed25519.NewIdentityPoint().VarTimeMultiScalarMult(codeword, commitments)
 	return product.Equal(ONE) == 1
+	// return true
 }
 
 // AggregateCommit aggregates polynomial commitment
+
 func AggregateCommit(total int, indexSets []int, data []*NodeData) *NodeData {
 	var (
 		commits  = make(Points, total)
@@ -392,12 +398,28 @@ func AggregateCommit(total int, indexSets []int, data []*NodeData) *NodeData {
 	lenIS := len(indexSets)
 	nDataZero := data[0]
 	proofs := nDataZero.Proofs
+	// <<<<<<< HEAD
 
+	// =======
+	// >>>>>>> 32f352ed86787ac38255333891822e4542bcba4a
 	for i, proof = range proofs {
 		commits[i] = proof.Commit
 		encEvals[i] = proof.EncEval
 	}
+	// <<<<<<< HEAD
+	// 	for id := 1; id < lenIS; id++ {
+	// =======
+	uindexsets := make([]uint64, lenIS)
+	if lenIS > 0 {
+		for t := 0; t < lenIS; t++ {
+			uindexsets[t] = uint64(indexSets[t])
+		}
+	} else {
+		uindexsets = []uint64{}
+	}
 	for id := 1; id < lenIS; id++ {
+
+		// >>>>>>> 32f352ed86787ac38255333891822e4542bcba4a
 		nData = data[id]
 		proofs = nData.Proofs
 		for i, proof = range proofs {
@@ -405,7 +427,8 @@ func AggregateCommit(total int, indexSets []int, data []*NodeData) *NodeData {
 			(&encEvals[i]).Add(&encEvals[i], &proof.EncEval)
 		}
 	}
-	root := aggrMerkleRoot(indexSets, commits, encEvals) // compute merkle root of "commits|encEvals|indexSets"
+
+	root, _ := AggrMerkleRoot(uindexsets, commits, encEvals) // compute merkle root of "commits|encEvals|indexSets"
 	return &NodeData{
 		Root:     root,
 		Points:   commits,
@@ -457,25 +480,36 @@ func validatePCommit(commitments Points, numNodes, threshold int) bool {
 }
 
 // aggrMerkleRoot computes the merkleroot of aggregate
-func aggrMerkleRoot(isets []int, commits, encEvals Points) common.Hash {
-	var bytestring []byte
+func AggrMerkleRoot(isets []uint64, commits, encEvals Points) (common.Hash, gomerkle.Tree) {
+	var byteslices [][]byte
 
 	for _, idx := range isets {
 		bs := make([]byte, 4)
 		binary.LittleEndian.PutUint32(bs, uint32(idx))
-		bytestring = append(bytestring, bs...)
-	}
-	for _, com := range commits {
-		bytestring = append(bytestring, com.Bytes()...)
+		byteslices = append(byteslices, bs)
 	}
 	for _, enc := range encEvals {
-		bytestring = append(bytestring, enc.Bytes()...)
+		byteslices = append(byteslices, enc.Bytes())
+	}
+	for _, com := range commits {
+		byteslices = append(byteslices, com.Bytes())
+	}
+	tree := gomerkle.NewTree(sha256.New())
+
+	tree.AddData(byteslices...)
+
+	err := tree.Generate()
+	if err != nil {
+		panic(err)
 	}
 
-	hash := sha256.New()
-	hash.Write(bytestring)
-	bs := hash.Sum(nil)
-	return common.BytesToHash(bs)
+	// // Proof for Jessie
+	// proof := tree.GetProof(4)
+	// leaf := tree.GetLeaf(4)
+	// newtree := gomerkle.NewTree(sha256.New())
+	// println(newtree.VerifyProof(proof, tree.Root(), leaf))
+
+	return common.BytesToHash(tree.Root()), tree
 }
 
 // ValidateCommit checks for correctness of a aggregated message
@@ -565,6 +599,7 @@ func ValidateRoundData(rData RoundData, root common.Hash) bool {
 
 // RecoverBeacon computes the beacon output
 // TODO(sourav): Optimize this!
+// DOUBT: Will number of shares always be equal tp threshold?
 func RecoverBeacon(shares map[uint64]*ed25519.Point, threshold int) ed25519.Point {
 	// initializing indeces
 	idxs := make([]*ed25519.Scalar, threshold)

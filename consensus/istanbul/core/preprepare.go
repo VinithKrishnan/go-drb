@@ -31,13 +31,14 @@ import (
 
 func (c *core) sendPreprepare(request *istanbul.Request) {
 	logger := c.logger.New("state", c.state)
-	// If I'm the proposer and I have the same sequence with the proposal
+	// I have the same sequence with the proposal
 	if c.current.Sequence().Cmp(request.Proposal.Number()) == 0 {
 		// sending polynomial commitment to the leader
 		seq := c.current.Sequence().Uint64()
-		if seq > c.startSeq-c.forwardSeq {
+		if seq > c.startSeq-c.forwardSeq { //DOUBT: What are startSeq and forwardSeq?
 			c.sendCommitment(c.forwardSeq)
 		}
+		// If I'm the proposer
 		if c.IsProposer() {
 			root := common.Hash{}
 			dataLen := 0
@@ -77,7 +78,7 @@ func (c *core) sendPreprepare(request *istanbul.Request) {
 				c.leaderMu.RLock()
 				root = c.penRoots[0]
 				cData := c.penAggData[root]
-				bisets := c.getByteIndexSets(c.penIndexSets[root])
+				bisets := c.penIndexSets[root]
 				commits := istanbul.PointsToBytes(cData.Points)
 				encEvals := istanbul.PointsToBytes(cData.EncEvals)
 				request.Proposal.UpdateDRB(bisets, commits, encEvals, cData.Root)
@@ -94,6 +95,20 @@ func (c *core) sendPreprepare(request *istanbul.Request) {
 				logger.Error("Failed to encode", "view", view)
 				return
 			}
+
+			// prepSent := 0
+			// for raddr, _ := range c.addrIDMap {
+			// 	prepSent = prepSent + 1
+			// 	if prepSent > 2*(c.threshold-1)+1 {
+			// 		break
+			// 	} else {
+			// 		go c.sendToNode(raddr, &message{ // should this be made async?
+			// 			Code: msgPreprepare,
+			// 			Msg:  preprepare,
+			// 		})
+			// 	}
+			// }
+
 			c.broadcast(&message{
 				Code: msgPreprepare,
 				Msg:  preprepare,
@@ -271,6 +286,7 @@ func (c *core) aggregate(idx int) {
 	// This function assumes that leaderMu is alreagy locked
 	var (
 		isets  = make([]int, c.threshold)
+		uisets = make([]uint64, c.threshold)
 		aisets = make([]common.Address, c.threshold)
 		data   = make([]*crypto.NodeData, c.threshold)
 	)
@@ -280,6 +296,7 @@ func (c *core) aggregate(idx int) {
 	for addr, nData := range pendings {
 		isets[i] = c.addrIDMap[addr]
 		aisets[i] = addr
+		uisets[i] = uint64(c.addrIDMap[addr])
 		data[i] = nData
 		i++
 	}
@@ -289,7 +306,7 @@ func (c *core) aggregate(idx int) {
 	root := aggData.Root
 	c.penRoots = append(c.penRoots, root)
 	c.penAggData[root] = aggData
-	c.penIndexSets[root] = aisets
+	c.penIndexSets[root] = uisets
 	c.penPrivData[root] = make(map[common.Address]*crypto.RoundData)
 
 	for raddr, ridx := range c.addrIDMap {
@@ -309,7 +326,7 @@ func (c *core) aggregate(idx int) {
 			Proofs:   proofs,
 		}
 		c.penPrivData[root][raddr] = &rData
-		go c.sendPrivateDataNode(raddr, &rData)
+		go c.sendPrivateDataNode(raddr, &rData) // this is where private data is sent to nodes
 	}
 
 	aggtime := c.logdir + "aggtime"
@@ -333,10 +350,17 @@ func (c *core) handleAggregate(sender common.Address, aData *crypto.NodeData) er
 	if err := crypto.ValidateCommit(true, aData, c.getPubKeys(), c.numNodes, c.threshold); err != nil {
 		return err
 	}
+	root, _ := crypto.AggrMerkleRoot(aData.IndexSet, aData.Points, aData.EncEvals)
+	log.Info("Handled root", "leader", aData.Root, "follower", root)
+
+	// index := len(aData.IndexSet) + c.addrIDMap[c.Address()]
+
+	// proof := tree.GetProof(index)
 
 	// adding aggregated information to the dictionary
 	c.nodeMu.Lock()
 	c.nodeAggData[aData.Round] = aData
+
 	c.nodeMu.Unlock()
 	log.Info("Handled Aggregate", "number", aData.Round, "root", aData.Root)
 	return nil
@@ -390,14 +414,18 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 
 	seq := preprepare.View.Sequence.Uint64()
 	round := preprepare.View.Round.Uint64()
+	root = preprepare.Proposal.RBRoot()
+	indexset := preprepare.Proposal.IndexSet()
+
 	if seq > c.startSeq {
-		root = preprepare.Proposal.RBRoot()
+
 		// Create a NodeData using the Preprepare message
 		aData = crypto.NodeData{
 			Round:    seq,
 			Root:     root,
 			Points:   istanbul.BytesToPoints(preprepare.Proposal.Commitments()),
 			EncEvals: istanbul.BytesToPoints(preprepare.Proposal.EncEvals()),
+			IndexSet: indexset,
 		}
 
 		if err := c.handleAggregate(src.Address(), &aData); err != nil {
@@ -405,7 +433,7 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 			return err
 		}
 	}
-
+	// DOUBT: Why should commit be resent?
 	// Ensure we have the same view with the PRE-PREPARE message
 	// If it is old message, see if we need to broadcast COMMIT
 	if err := c.checkMessage(msgPreprepare, preprepare.View); err != nil {
@@ -418,7 +446,7 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 			// 1. The proposer needs to be a proposer matches the given (Sequence + Round)
 			// 2. The given block must exist
 			if valSet.IsProposer(src.Address()) && c.backend.HasPropsal(preprepare.Proposal.Hash(), preprepare.Proposal.Number()) {
-				c.sendCommitForOldBlock(preprepare.View, preprepare.Proposal.Hash())
+				c.sendCommitForOldBlock(preprepare.View, preprepare.Proposal.RBRoot())
 				return nil
 			}
 		}
@@ -459,7 +487,7 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 				// Broadcast COMMIT and enters Prepared state directly
 				c.acceptPreprepare(preprepare)
 				c.setState(StatePrepared)
-				c.sendCommit()
+				c.sendCommit(c.current.GetLockedRoot())
 			} else {
 				// Send round change
 				c.sendNextRoundChange()
@@ -471,7 +499,7 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 			} else {
 				c.acceptPreprepare(preprepare)
 				c.setState(StatePreprepared)
-				c.sendPrepare()
+				c.sendPrepare(root)
 			}
 			// Logging handle prepare time
 			rprptime := c.logdir + "rprptime"
@@ -485,6 +513,8 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 	}
 	return nil
 }
+
+// DOUBT:Difference between round and sequence.
 
 func (c *core) handlePreprepareAsync(preprepare *istanbul.Preprepare, root common.Hash, seq, round uint64) {
 	// TODO(sourav): Check whether the private data sent by the leader corresponds
@@ -500,6 +530,7 @@ func (c *core) handlePreprepareAsync(preprepare *istanbul.Preprepare, root commo
 			select {
 			// TODO(sourav): We can change this to a bool value indicating
 			// whether the leader sent correct data or not.
+			//DOUBT: Are we checking whehter leaders proposal is correct?
 			case croot := <-c.privDataCh:
 				cseq := preprepare.View.Sequence.Uint64()
 				cround := preprepare.View.Round.Uint64()
@@ -522,7 +553,7 @@ func (c *core) handlePreprepareAsync(preprepare *istanbul.Preprepare, root commo
 	//   2. we have no locked proposal
 	c.acceptPreprepare(preprepare)
 	c.setState(StatePreprepared)
-	c.sendPrepare()
+	c.sendPrepare(root)
 }
 
 func (c *core) acceptPreprepare(preprepare *istanbul.Preprepare) {

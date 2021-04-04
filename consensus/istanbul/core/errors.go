@@ -30,6 +30,8 @@ var (
 	// errFutureMessage is returned when current view is earlier than the
 	// view of the received message.
 	errFutureMessage = errors.New("future message")
+
+	errInvalidMultiSig = errors.New("Returned MultiSig is invalid")
 	// errOldMessage is returned when the received message's view is earlier
 	// than current view.
 	errOldMessage = errors.New("old message")
@@ -45,16 +47,26 @@ var (
 	errInvalidCommitment  = errors.New("invalid COMMITMENT ")
 	errInvalidReconstruct = errors.New("invalid  RECONSTRUCTION MSG")
 	errAggDataNotFound    = errors.New("Aggregate data not found")
+	errRootNotDecided     = errors.New("Root not decided yet")
 
 	// errFailedDecodeCommitment is returned when the AGGREGATE message is malformed.
-	errFailedDecodeCommitment  = errors.New("failed to decode COMMITMENT")
-	errFailedDecodePrivateData = errors.New("failed to decode PRIVATE DATA")
-	errFailedDecodeReconstruct = errors.New("failed to decode RECONSTRUCTION MSG")
-
+	errFailedDecodeCommitment    = errors.New("failed to decode COMMITMENT")
+	errFailedDecodePrivateData   = errors.New("failed to decode PRIVATE DATA")
+	errFailedDecodeReconstruct   = errors.New("failed to decode RECONSTRUCTION MSG")
+	errFailedDecodeReqMerklePath = errors.New("failed to decode ReqMerklePath")
+	errFailedDecodeMerklePath    = errors.New("failed to decode MerklePath")
+	errFailedDecodeReqMultiSig   = errors.New("failed to decode ReqMultiSig")
+	errFailedDecodeMultiSig      = errors.New("failed to decode MultiSig")
 	// dummy errors to avoid propagation of commitment messages
-	errHandleCommitment  = errors.New("Sucessdully handled commitment")
-	errHandlePrivData    = errors.New("Sucessdully handled private data")
-	errHandleReconstruct = errors.New("Sucessdully handled reconstruction message")
+	errHandleCommitment      = errors.New("Sucessdully handled commitment")
+	errHandlePrivData        = errors.New("Sucessdully handled private data")
+	errHandleReconstruct     = errors.New("Sucessdully handled reconstruction message")
+	errHandleReqMerklePath   = errors.New("Sucessfully handled reqmerklepath message")
+	errHandleReqMultiSig     = errors.New("Sucessfully handled reqmultisig message")
+	errHandleMerklePath      = errors.New("Sucessfully handled MerklePath message")
+	errHandleMultiSig        = errors.New("Sucessfully handled MultiSig message")
+	errFailedEncodeMerklPath = errors.New("Failed to encode merkle path")
+	errFailedEncodeMultiSig  = errors.New("Failed to encode multisig")
 
 	// errFailedDecodePrepare is returned when the PREPARE message is malformed.
 	errFailedDecodePrepare = errors.New("failed to decode PREPARE")
@@ -63,5 +75,10 @@ var (
 	// errFailedDecodeMessageSet is returned when the message set is malformed.
 	// errFailedDecodeMessageSet = errors.New("failed to decode message set")
 	// errInvalidSigner is returned when the message is signed by a validator different than message sender
-	errInvalidSigner = errors.New("message not signed by the sender")
+	errInvalidSigner        = errors.New("message not signed by the sender")
+	errInconsistentMultiSig = errors.New("Recieved multisig root not consistent")
+
+	errHandleMerkleProof = errors.New("Failed ot handle merkle proof")
+
+	// var errSendData = errors.New("Unable to send node data")
 )

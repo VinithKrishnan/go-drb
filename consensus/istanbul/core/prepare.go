@@ -19,39 +19,45 @@ package core
 import (
 	"reflect"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/istanbul"
 )
 
-func (c *core) sendPrepare() {
+func (c *core) sendPrepare(root common.Hash) {
 	logger := c.logger.New("state", c.state)
 
 	sub := c.current.Subject()
-	encodedSubject, err := Encode(sub)
+
+	encodedPrepare, err := Encode(&istanbul.Prepare{
+		Sub:  sub,
+		Root: root,
+	})
+
 	if err != nil {
-		logger.Error("Failed to encode", "subject", sub)
+		logger.Error("Failed to encode", "subject", "in Sendprepare")
 		return
 	}
 	c.broadcast(&message{
 		Code: msgPrepare,
-		Msg:  encodedSubject,
+		Msg:  encodedPrepare,
 	})
 }
 
 func (c *core) handlePrepare(msg *message, src istanbul.Validator) error {
 	// Decode PREPARE message
-	var prepare *istanbul.Subject
+	var prepare *istanbul.Prepare
 	err := msg.Decode(&prepare)
 	if err != nil {
 		return errFailedDecodePrepare
 	}
 
-	if err := c.checkMessage(msgPrepare, prepare.View); err != nil {
+	if err := c.checkMessage(msgPrepare, prepare.Sub.View); err != nil {
 		return err
 	}
 
 	// If it is locked, it can only process on the locked block.
 	// Passing verifyPrepare and checkMessage implies it is processing on the locked block since it was verified in the Preprepared state.
-	if err := c.verifyPrepare(prepare, src); err != nil {
+	if err := c.verifyPrepare(prepare.Sub, src); err != nil {
 		return err
 	}
 
@@ -59,11 +65,11 @@ func (c *core) handlePrepare(msg *message, src istanbul.Validator) error {
 
 	// Change to Prepared state if we've received enough PREPARE messages or it is locked
 	// and we are in earlier state before Prepared state.
-	if ((c.current.IsHashLocked() && prepare.Digest == c.current.GetLockedHash()) || c.current.GetPrepareOrCommitSize() >= c.QuorumSize()) &&
+	if ((c.current.IsHashLocked() && prepare.Root == c.current.GetLockedRoot()) || c.current.GetPrepareOrCommitSize() >= c.QuorumSize()) &&
 		c.state.Cmp(StatePrepared) < 0 {
 		c.current.LockHash()
 		c.setState(StatePrepared)
-		c.sendCommit()
+		c.sendCommit(c.current.GetLockedRoot())
 	}
 
 	return nil
@@ -84,6 +90,23 @@ func (c *core) verifyPrepare(prepare *istanbul.Subject, src istanbul.Validator) 
 
 func (c *core) acceptPrepare(msg *message, src istanbul.Validator) error {
 	logger := c.logger.New("from", src, "state", c.state)
+
+	// var prepare *istanbul.Prepare
+	// err := msg.Decode(&prepare)
+
+	// if err != nil {
+	// 	return errFailedDecodePrepare
+	// }
+
+	// encodedSubject, err := Encode(&istanbul.Subject{
+	// 	View:   prepare.Sub.View,
+	// 	Digest: prepare.Sub.Digest,
+	// })
+
+	// submsg := &message{
+	// 	Code: msgPrepare, //@Vinith using same message type here , is this alright?
+	// 	Msg:  encodedSubject,
+	// }
 
 	// Add the PREPARE message to current round state
 	if err := c.current.Prepares.Add(msg); err != nil {

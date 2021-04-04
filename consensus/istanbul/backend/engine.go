@@ -401,7 +401,7 @@ func (sb *backend) Prepare(chain consensus.ChainReader, header *types.Header) er
 
 	// DRB data
 	header.RBRoot = common.Hash{}
-	header.IndexSet = []byte{}
+	header.IndexSet = []uint64{}
 	header.Commitments = [][]byte{}
 	header.EncEvals = [][]byte{}
 

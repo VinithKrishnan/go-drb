@@ -30,6 +30,8 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/istanbul"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	bn256 "github.com/ethereum/go-ethereum/crypto/bn256/cloudflare"
+
 	// "github.com/ethereum/go-ethereum/crypto/ed25519"
 	"github.com/ethereum/go-ethereum/event"
 	ed25519 "github.com/ethereum/go-ethereum/filippo.io/edwards25519"
@@ -42,36 +44,42 @@ import (
 func New(backend istanbul.Backend, config *istanbul.Config) Engine {
 	r := metrics.NewRegistry()
 	c := &core{
-		config:             config,
-		address:            backend.Address(),
-		state:              StateAcceptRequest,
-		handlerWg:          new(sync.WaitGroup),
-		logger:             log.New("address", backend.Address()),
-		backend:            backend,
-		backlogs:           make(map[common.Address]*prque.Prque),
-		backlogsMu:         new(sync.Mutex),
-		pendingRequests:    prque.New(),
-		pendingRequestsMu:  new(sync.Mutex),
-		consensusTimestamp: time.Time{},
-		roundMeter:         metrics.NewMeter(),
-		sequenceMeter:      metrics.NewMeter(),
-		consensusTimer:     metrics.NewTimer(),
-		startSeq:           config.StartSeq,
-		forwardSeq:         config.ForwardSeq,
-		index:              config.NodeIndex,
-		local:              config.Local,
-		commitmentCh:       make(chan struct{}, 10),
-		privDataCh:         make(chan common.Hash, 10),
-		pubKeys:            make(map[common.Address]*ed25519.Point),
-		addrIDMap:          make(map[common.Address]int),
-		idAddrMap:          make(map[int]common.Address),
-		nodeAggData:        make(map[uint64]*crypto.NodeData),
-		nodePrivData:       make(map[common.Hash]*crypto.RoundData),
-		nodeRecData:        make(map[uint64]map[uint64]*ed25519.Point),
-		beacon:             make(map[uint64]*ed25519.Point),
-		penAggData:         make(map[common.Hash]*crypto.NodeData),
-		penIndexSets:       make(map[common.Hash][]common.Address),
-		penPrivData:        make(map[common.Hash]map[common.Address]*crypto.RoundData),
+		config:                config,
+		address:               backend.Address(),
+		state:                 StateAcceptRequest,
+		handlerWg:             new(sync.WaitGroup),
+		logger:                log.New("address", backend.Address()),
+		backend:               backend,
+		backlogs:              make(map[common.Address]*prque.Prque),
+		backlogsMu:            new(sync.Mutex),
+		pendingRequests:       prque.New(),
+		pendingRequestsMu:     new(sync.Mutex),
+		consensusTimestamp:    time.Time{},
+		roundMeter:            metrics.NewMeter(),
+		sequenceMeter:         metrics.NewMeter(),
+		consensusTimer:        metrics.NewTimer(),
+		startSeq:              config.StartSeq,
+		forwardSeq:            config.ForwardSeq,
+		index:                 config.NodeIndex,
+		local:                 config.Local,
+		commitmentCh:          make(chan struct{}, 10),
+		privDataCh:            make(chan common.Hash, 10),
+		merklePathCh:          make(chan uint64, 10),
+		pubKeys:               make(map[common.Address]*ed25519.Point),
+		blspubKeys:            make(map[common.Address]*bn256.G2),
+		blsmemkeys:            make(map[common.Address]*bn256.G1),
+		addrIDMap:             make(map[common.Address]int),
+		idAddrMap:             make(map[int]common.Address),
+		nodeAggData:           make(map[uint64]*crypto.NodeData),
+		nodePrivData:          make(map[common.Hash]*crypto.RoundData),
+		nodeRecData:           make(map[uint64]map[uint64]*crypto.RecData),
+		nodeDecidedRoot:       make(map[uint64]common.Hash),
+		nodeConfShares:        make(map[uint64]map[uint64]*ed25519.Point),
+		nodeDecidedCommitCert: make(map[uint64]*istanbul.CommitCert),
+		beacon:                make(map[uint64]*ed25519.Point),
+		penAggData:            make(map[common.Hash]*crypto.NodeData),
+		penIndexSets:          make(map[common.Hash][]uint64),
+		penPrivData:           make(map[common.Hash]map[common.Address]*crypto.RoundData),
 	}
 
 	r.Register("consensus/istanbul/core/round", c.roundMeter)
@@ -102,12 +110,17 @@ type core struct {
 	forwardSeq   uint64
 	commitmentCh chan struct{}    // channel to indicate enough commitment
 	privDataCh   chan common.Hash // channel to indicate that aggregate data has been received
+	merklePathCh chan uint64      // chaneel to indicate merkle path has arrived
 
 	// drb data
-	edKey     types.Key // secret key of the node
-	pubKeys   map[common.Address]*ed25519.Point
-	addrIDMap map[common.Address]int
-	idAddrMap map[int]common.Address
+	edKey  types.EdKey // secret key of the node
+	blsKey types.BLSKey
+
+	pubKeys    map[common.Address]*ed25519.Point
+	blspubKeys map[common.Address]*bn256.G2
+	blsmemkeys map[common.Address]*bn256.G1
+	addrIDMap  map[common.Address]int
+	idAddrMap  map[int]common.Address
 
 	// drb locks
 	leaderMu sync.RWMutex
@@ -118,14 +131,17 @@ type core struct {
 	penRoots     []common.Hash                         // pending roots
 	penData      []map[common.Address]*crypto.NodeData // future usable commitments
 	penAggData   map[common.Hash]*crypto.NodeData      // future usable aggregate data
-	penIndexSets map[common.Hash][]common.Address      // index set of pending aggregated data
+	penIndexSets map[common.Hash][]uint64              // index set of pending aggregated data
 	penPrivData  map[common.Hash]map[common.Address]*crypto.RoundData
 
 	// for other nodes
-	nodeAggData  map[uint64]*crypto.NodeData          // height: [agg. poly. commit; agg. enc]
-	nodePrivData map[common.Hash]*crypto.RoundData    // height: node's private data for aggregated commitment
-	nodeRecData  map[uint64]map[uint64]*ed25519.Point // height: {index:share}
-	beacon       map[uint64]*ed25519.Point            // height: beacon-output
+	nodeAggData           map[uint64]*crypto.NodeData           // height: [agg. poly. commit; agg. enc]
+	nodePrivData          map[common.Hash]*crypto.RoundData     // height: node's private data for aggregated commitment
+	nodeRecData           map[uint64]map[uint64]*crypto.RecData // height: {index:RecData}
+	beacon                map[uint64]*ed25519.Point             // height: beacon-output
+	nodeDecidedRoot       map[uint64]common.Hash                // height:Decided root
+	nodeConfShares        map[uint64]map[uint64]*ed25519.Point  // height: {index:share} @Vinith:Redundant data, can optimize
+	nodeDecidedCommitCert map[uint64]*istanbul.CommitCert       // height:  CommitCert
 
 	backend               istanbul.Backend
 	events                *event.TypeMuxSubscription
@@ -150,6 +166,7 @@ type core struct {
 	pendingRequestsMu *sync.Mutex
 
 	consensusTimestamp time.Time
+
 	// the meter to record the round change rate
 	roundMeter metrics.Meter
 	// the meter to record the sequence update rate
@@ -159,41 +176,117 @@ type core struct {
 }
 
 func (c *core) InitKeys(vals []common.Address) error {
+
+	log.Info("Init keys has been called")
 	// Initializing the public keys
-	pkPath := "pubkey.json"
-	keyPath := "key.json"
+	homedir := "/mnt/c/Users/VinithKrishnan/drb-expt/"
+	// homedir := "/Users/sourav/drb-expt/"
+	pkPath := homedir + "pubkey.json"
+	blspkPath := homedir + "blspubkey.json"
+	blsmkPath := homedir + "blsmemkey.json"
+	edkeyPath := homedir + "key.json"
+	blskeyPath := homedir + "blskey.json"
+
 	c.logdir = "/home/ubuntu/drb/"
 	if c.local {
-		keyPath = "edkeys/k" + strconv.Itoa(c.index) + ".json"
-		c.logdir = "/Users/sourav/drb/log/"
+		edkeyPath = homedir + "/edkeys/k" + strconv.Itoa(c.index) + ".json"
+		blskeyPath = homedir + "/blskeys/k" + strconv.Itoa(c.index) + ".json"
+		c.logdir = homedir + "/drb/log/" // should be changed to variable ofr reproducability purpose
 	}
 
 	// initializing number of nodes an threshold
 	c.setNumNodesTh(len(vals))
 
 	// Load the nodes from the config file.
-	var nodelist []string
-	if err := common.LoadJSON(pkPath, &nodelist); err != nil {
+	var ednodelist []string
+	if err := common.LoadJSON(pkPath, &ednodelist); err != nil {
 		log.Error("Can't load node file", "path", pkPath, "error", err)
 		return err
 	}
+	var blspknodelist []string
+	if err := common.LoadJSON(blspkPath, &blspknodelist); err != nil {
+		log.Error("Can't load node file", "path", blspkPath, "error", err)
+		return err
+	}
+	var blsmknodelist []string
+	if err := common.LoadJSON(blsmkPath, &blsmknodelist); err != nil {
+		log.Error("Can't load node file", "path", blsmkPath, "error", err)
+		return err
+	}
+
 	for i, val := range vals {
 		c.addrIDMap[val] = i
 		c.idAddrMap[i] = val
-		c.pubKeys[val] = types.StringToPoint(nodelist[i])
-		log.Trace("Initializing pkeys", "addr", val, "idx", i, "pkey", nodelist[i])
+		c.pubKeys[val] = types.EdStringToPoint(ednodelist[i])
+		// log.Info("Initializing pkeys", "addr", val, "idx", i)
+		c.blspubKeys[val] = types.G2StringToPoint(blspknodelist[i])
+		c.blsmemkeys[val] = types.G1StringToPoint(blsmknodelist[i])
+
 	}
+
 	c.position = c.addrIDMap[c.address]
 
 	// loads the key into the key of the user
-	var strKey types.StringKey
-	if err := common.LoadJSON(keyPath, &strKey); err != nil {
-		log.Error("Can't load node file", "path", keyPath, "error", err)
+	var edstrKey types.EdStringKey
+	if err := common.LoadJSON(edkeyPath, &edstrKey); err != nil {
+		log.Error("Can't load node file", "path", edkeyPath, "error", err)
 		return err
 	}
-	c.edKey = types.StringToKey(strKey)
-	log.Debug("Initializing local key", "addr", c.address, "pkey", strKey.Pkey)
+	// log.Info("String Key is:", strKey)
+	c.edKey = types.EdStringToKey(edstrKey)
+	log.Info("Initializing local key", "addr", c.address, "pkey", edstrKey.Pkey)
+
+	var BLSstrKey types.BLSStringKey
+	if err := common.LoadJSON(blskeyPath, &BLSstrKey); err != nil {
+		log.Error("Can't load node file", "path", blskeyPath, "error", err)
+		return err
+	}
+	log.Info("String Key is:", BLSstrKey)
+	c.blsKey = types.BLSStringToKey(BLSstrKey)
+	log.Info("Initializing local key", "addr", c.address, "mkey", c.blsKey.Mkey, "skey", c.blsKey.Skey)
 	return nil
+
+}
+
+func (c *core) GenerateAggSig() ([]uint64, *bn256.G2, *bn256.G1) {
+	log.Info("Inside GenerateAggsig")
+	var nodelist []uint64
+	var aggpk *bn256.G2
+	var aggsig *bn256.G1
+	var SignList []*bn256.G1
+	var PkList []*bn256.G2
+	// var root common.Hash
+	for _, msg := range c.current.Commits.Values() {
+		var commit *istanbul.Commit
+		err := msg.Decode(&commit)
+		// root = commit.Root
+		if err != nil {
+			log.Error("Failed to decode stored commit message")
+		}
+		sig := new(bn256.G1)
+		_, err = sig.Unmarshal(commit.Sign)
+		if err != nil {
+			log.Error("Unable to unmarshal commit sign")
+		}
+		// log.Info("commit sign is", "value:", sig)
+		SignList = append(SignList, sig)
+		PkList = append(PkList, c.blspubKeys[msg.Address])
+		nodelist = append(nodelist, uint64(c.addrIDMap[msg.Address]+1))
+	}
+
+	aggpk, aggsig = crypto.SignAggregator(PkList, SignList)
+
+	// apk, _ := crypto.KeyAgg(PkList)
+	// var intnodelist []int
+	// for _, value := range nodelist {
+	// 	intnodelist = append(intnodelist, int(value))
+	// }
+	// if !crypto.Verify(intnodelist, apk, root.Bytes(), aggpk, aggsig) {
+	// 	log.Error("Multisig generation failed")
+
+	// }
+	return nodelist, aggpk, aggsig
+
 }
 
 // getIndex returns the index of the user
@@ -301,7 +394,7 @@ func (c *core) IsCurrentProposal(blockHash common.Hash) bool {
 	return c.current != nil && c.current.pendingRequest != nil && c.current.pendingRequest.Proposal.Hash() == blockHash
 }
 
-func (c *core) commit(seq uint64) {
+func (c *core) commit(seq uint64, digest common.Hash) {
 	c.setState(StateCommitted)
 
 	proposal := c.current.Proposal()
@@ -318,7 +411,9 @@ func (c *core) commit(seq uint64) {
 		}
 
 		if seq > c.startSeq {
-			go c.sendReconstruct(seq)
+
+			go c.sendReconstruct(seq, digest)
+			// log.Info("Sent reconstruction message")
 		}
 		fintime := c.logdir + "fintime"
 		fintimef, err := os.OpenFile(fintime, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -327,6 +422,8 @@ func (c *core) commit(seq uint64) {
 		}
 		fmt.Fprintln(fintimef, seq, proposal.RBRoot().Hex(), c.position, c.Now())
 		fintimef.Close()
+
+		log.Info("Committed block in core.go", "number", seq)
 	}
 }
 
@@ -448,12 +545,12 @@ func (c *core) updateRoundState(view *istanbul.View, validatorSet istanbul.Valid
 	// Lock only if both roundChange is true and it is locked
 	if roundChange && c.current != nil {
 		if c.current.IsHashLocked() {
-			c.current = newRoundState(view, validatorSet, c.current.GetLockedHash(), c.current.Preprepare, c.current.pendingRequest, c.backend.HasBadProposal)
+			c.current = newRoundState(view, validatorSet, c.current.GetLockedHash(), c.current.GetLockedRoot(), c.current.Preprepare, c.current.pendingRequest, c.backend.HasBadProposal)
 		} else {
-			c.current = newRoundState(view, validatorSet, common.Hash{}, nil, c.current.pendingRequest, c.backend.HasBadProposal)
+			c.current = newRoundState(view, validatorSet, common.Hash{}, common.Hash{}, nil, c.current.pendingRequest, c.backend.HasBadProposal)
 		}
 	} else {
-		c.current = newRoundState(view, validatorSet, common.Hash{}, nil, nil, c.backend.HasBadProposal)
+		c.current = newRoundState(view, validatorSet, common.Hash{}, common.Hash{}, nil, nil, c.backend.HasBadProposal)
 	}
 }
 

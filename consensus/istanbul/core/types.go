@@ -86,6 +86,10 @@ const (
 	msgCommitment
 	msgPrivateData
 	msgReconstruct
+	msgReqMerklePath
+	msgMerklePath
+	msgReqMultiSig
+	msgMultiSig
 	// msgAll
 )
 
