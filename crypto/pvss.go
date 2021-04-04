@@ -385,15 +385,24 @@ func AggregateCommit(total int, indexSets []int, data []*NodeData) *NodeData {
 	var (
 		commits  = make(Points, total)
 		encEvals = make(Points, total)
+		i        int
+		proof    NizkProof
+		nData    *NodeData
 	)
 	lenIS := len(indexSets)
-	for id := 0; id < lenIS; id++ {
-		nodeData := data[id]
-		for i, proof := range nodeData.Proofs {
-			if id == 0 {
-				commits[i] = proof.Commit
-				encEvals[i] = proof.EncEval
-			}
+	nDataZero := data[0]
+	proofs := nDataZero.Proofs
+
+	for i, proof = range proofs {
+		commits[i] = proof.Commit
+		encEvals[i] = proof.EncEval
+	}
+	for id := 1; id < lenIS; id++ {
+		nData = data[id]
+		proofs = nData.Proofs
+		for i, proof = range proofs {
+			(&commits[i]).Add(&commits[i], &proof.Commit)
+			(&encEvals[i]).Add(&encEvals[i], &proof.EncEval)
 		}
 	}
 	root := aggrMerkleRoot(indexSets, commits, encEvals) // compute merkle root of "commits|encEvals|indexSets"
