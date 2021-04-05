@@ -177,7 +177,7 @@ type core struct {
 
 func (c *core) InitKeys(vals []common.Address) error {
 
-	log.Info("Init keys has been called")
+	log.Debug("Init keys has been called")
 	// Initializing the public keys
 	homedir := "/mnt/c/Users/VinithKrishnan/drb-expt/"
 	// homedir := "/Users/sourav/drb-expt/"
@@ -218,7 +218,7 @@ func (c *core) InitKeys(vals []common.Address) error {
 		c.addrIDMap[val] = i
 		c.idAddrMap[i] = val
 		c.pubKeys[val] = types.EdStringToPoint(ednodelist[i])
-		// log.Info("Initializing pkeys", "addr", val, "idx", i)
+		// log.Debug("Initializing pkeys", "addr", val, "idx", i)
 		c.blspubKeys[val] = types.G2StringToPoint(blspknodelist[i])
 		c.blsmemkeys[val] = types.G1StringToPoint(blsmknodelist[i])
 
@@ -232,24 +232,24 @@ func (c *core) InitKeys(vals []common.Address) error {
 		log.Error("Can't load node file", "path", edkeyPath, "error", err)
 		return err
 	}
-	// log.Info("String Key is:", strKey)
+	// log.Debug("String Key is:", strKey)
 	c.edKey = types.EdStringToKey(edstrKey)
-	log.Info("Initializing local key", "addr", c.address, "pkey", edstrKey.Pkey)
+	log.Debug("Initializing local key", "addr", c.address, "pkey", edstrKey.Pkey)
 
 	var BLSstrKey types.BLSStringKey
 	if err := common.LoadJSON(blskeyPath, &BLSstrKey); err != nil {
 		log.Error("Can't load node file", "path", blskeyPath, "error", err)
 		return err
 	}
-	log.Info("String Key is:", BLSstrKey)
+	log.Debug("String Key is:", BLSstrKey)
 	c.blsKey = types.BLSStringToKey(BLSstrKey)
-	log.Info("Initializing local key", "addr", c.address, "mkey", c.blsKey.Mkey, "skey", c.blsKey.Skey)
+	log.Debug("Initializing local key", "addr", c.address, "mkey", c.blsKey.Mkey, "skey", c.blsKey.Skey)
 	return nil
 
 }
 
 func (c *core) GenerateAggSig() ([]uint64, *bn256.G2, *bn256.G1) {
-	log.Info("Inside GenerateAggsig")
+	log.Debug("Inside GenerateAggsig")
 	var nodelist []uint64
 	var aggpk *bn256.G2
 	var aggsig *bn256.G1
@@ -423,7 +423,7 @@ func (c *core) commit(seq uint64, digest common.Hash) {
 		fmt.Fprintln(fintimef, seq, proposal.RBRoot().Hex(), c.position, c.Now())
 		fintimef.Close()
 
-		log.Info("Committed block in core.go", "number", seq)
+		log.Debug("Committed block in core.go", "number", seq)
 	}
 }
 

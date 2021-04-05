@@ -89,9 +89,9 @@ func BLSStringToKey(strKey BLSStringKey) BLSKey {
 	bMkey, err1 := hex.DecodeString(strKey.Mkey)
 	bSkey, err2 := hex.DecodeString(strKey.Skey)
 	mkey := new(bn256.G1)
-	log.Info("BLSStringKey", "bmKey", bMkey)
+	log.Debug("BLSStringKey", "bmKey", bMkey)
 	_, err3 := mkey.Unmarshal(bMkey)
-	log.Info("BLSStringKey", "mKey", *mkey)
+	log.Debug("BLSStringKey", "mKey", *mkey)
 	skey := new(big.Int).SetBytes(bSkey)
 
 	if err1 != nil {

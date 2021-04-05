@@ -57,7 +57,7 @@ func (c *core) sendReconstruct(seq uint64, digest common.Hash) {
 
 	c.nodeDecidedRoot[seq] = digest
 	c.nodeMu.Unlock()
-	log.Info("Deciding commit cert", "Seq", seq, "nodelist", nodelist, "roothash in bytes", digest.Bytes(), "aggpk", aggpk, "aggsig", aggsign)
+	log.Debug("Deciding commit cert", "Seq", seq, "nodelist", nodelist, "roothash in bytes", digest.Bytes(), "aggpk", aggpk, "aggsig", aggsign)
 	if ok {
 		index := c.addrIDMap[c.Address()]
 
@@ -116,17 +116,16 @@ func (c *core) handleReconstruct(msg *message, src istanbul.Validator) error {
 	// check whether root has been decided or not
 	_, rok := c.nodeDecidedRoot[rSeq]
 	if !rok {
-		log.Error("PrePrepare message not received from leader")
-		c.SendReqMultiSig(rSeq, src.Address()) // should i make this synchronous?
-		log.Info("No deadlock in reconstruct.go")
+		// log.Error("PrePrepare message not received from leader")
+		// c.SendReqMultiSig(rSeq, src.Address()) // should i make this synchronous?
 		return errRootNotDecided
 
 	}
 
 	aData, aok := c.nodeAggData[rSeq]
 	if !aok {
-		log.Error("Aggregate Data not received from leader")
-		c.SendReqMerklePath(rSeq, src.Address()) // should i make this asynchronous?
+		// log.Error("Aggregate Data not received from leader")
+		// c.SendReqMerklePath(rSeq, src.Address()) // should i make this asynchronous?
 		return errAggDataNotFound
 	}
 

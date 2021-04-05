@@ -351,7 +351,7 @@ func (c *core) handleAggregate(sender common.Address, aData *crypto.NodeData) er
 		return err
 	}
 	root, _ := crypto.AggrMerkleRoot(aData.IndexSet, aData.Points, aData.EncEvals)
-	log.Info("Handled root", "leader", aData.Root, "follower", root)
+	log.Debug("Handled root", "leader", aData.Root, "follower", root)
 
 	// index := len(aData.IndexSet) + c.addrIDMap[c.Address()]
 

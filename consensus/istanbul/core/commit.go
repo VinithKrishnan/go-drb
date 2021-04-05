@@ -49,16 +49,16 @@ func (c *core) broadcastCommit(sub *istanbul.Subject, root common.Hash) {
 		pubkeys = append(pubkeys, value)
 	}
 	if pubkeys == nil {
-		log.Info("pubkeys")
+		log.Debug("pubkeys")
 	}
 	if &c.blsKey.Skey == nil {
-		log.Info("Skey")
+		log.Debug("Skey")
 	}
 	if &c.blsKey.Mkey == nil {
-		log.Info("Mkey")
+		log.Debug("Mkey")
 	}
 
-	// log.Info("Commit values", "root", root.Bytes(), "pubkeys", pubkeys, "Skey", c.blsKey.Skey, "Mkey", c.blsKey.Mkey)
+	// log.Debug("Commit values", "root", root.Bytes(), "pubkeys", pubkeys, "Skey", c.blsKey.Skey, "Mkey", c.blsKey.Mkey)
 
 	sigbytes := []byte("hello")
 	if sub.View.Sequence.Uint64() > c.startSeq {
@@ -131,7 +131,7 @@ func (c *core) handleCommit(msg *message, src istanbul.Validator) error {
 		c.current.LockHash()
 
 		c.commit(commit.Sub.View.Sequence.Uint64(), commit.Sub.Digest)
-		log.Info("Commited new block in commit.go")
+		log.Debug("Commited new block in commit.go")
 	}
 
 	return nil
