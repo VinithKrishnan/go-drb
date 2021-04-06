@@ -179,8 +179,9 @@ func (c *core) InitKeys(vals []common.Address) error {
 
 	log.Debug("Init keys has been called")
 	// Initializing the public keys
-	homedir := "/mnt/c/Users/VinithKrishnan/drb-expt/"
+	// homedir := "/mnt/c/Users/VinithKrishnan/drb-expt/"
 	// homedir := "/Users/sourav/drb-expt/"
+	homedir := "/home/ubuntu/drb/"
 	pkPath := homedir + "pubkey.json"
 	blspkPath := homedir + "blspubkey.json"
 	blsmkPath := homedir + "blsmemkey.json"
@@ -189,9 +190,9 @@ func (c *core) InitKeys(vals []common.Address) error {
 
 	c.logdir = "/home/ubuntu/drb/"
 	if c.local {
-		edkeyPath = homedir + "/edkeys/k" + strconv.Itoa(c.index) + ".json"
-		blskeyPath = homedir + "/blskeys/k" + strconv.Itoa(c.index) + ".json"
-		c.logdir = homedir + "/drb/log/" // should be changed to variable ofr reproducability purpose
+		edkeyPath = homedir + "edkeys/k" + strconv.Itoa(c.index) + ".json"
+		blskeyPath = homedir + "blskeys/k" + strconv.Itoa(c.index) + ".json"
+		c.logdir = homedir + "drb/log/" // should be changed to variable ofr reproducability purpose
 	}
 
 	// initializing number of nodes an threshold
