@@ -233,8 +233,8 @@ func (c *core) InitKeys(vals []common.Address) error {
 
 	}
 
-	apk, _ := crypto.KeyAgg(pubkeylist)
-	c.pubkeyagg = apk
+	c.pubkeyagg, _ = crypto.KeyAgg(pubkeylist)
+	
 	
 
 	c.position = c.addrIDMap[c.address]

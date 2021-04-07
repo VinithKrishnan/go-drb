@@ -422,8 +422,10 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 
 		// create a bls sign on root
 		go func() {
-		sig := crypto.BlsSign(c.pubkeyagg.Marshal(), &c.blsKey.Skey, &c.blsKey.Mkey, root.Bytes())
-		c.sigbytes[seq] = sig.Marshal()
+			c.nodeMu.Lock()
+			defer c.nodeMu.Unlock()
+			sig := crypto.BlsSign(c.pubkeyagg.Marshal(), &c.blsKey.Skey, &c.blsKey.Mkey, root.Bytes())
+			c.sigbytes[seq] = sig.Marshal()
 		} ()
 		
 
