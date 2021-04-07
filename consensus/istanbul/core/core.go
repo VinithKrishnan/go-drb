@@ -179,9 +179,11 @@ func (c *core) InitKeys(vals []common.Address) error {
 
 	log.Debug("Init keys has been called")
 	// Initializing the public keys
-	// homedir := "/mnt/c/Users/VinithKrishnan/drb-expt/"
-	// homedir := "/Users/sourav/drb-expt/"
 	homedir := "/home/ubuntu/drb/"
+	if c.local {
+		// homedir := "/mnt/c/Users/VinithKrishnan/drb-expt/"
+		homedir = "/Users/sourav/drb-expt/remote/"
+	}
 	pkPath := homedir + "pubkey.json"
 	blspkPath := homedir + "blspubkey.json"
 	blsmkPath := homedir + "blsmemkey.json"
