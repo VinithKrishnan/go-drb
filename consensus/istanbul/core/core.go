@@ -29,7 +29,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/istanbul"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/crypto"
+	crypto "github.com/ethereum/go-ethereum/crypto"
 	bn256 "github.com/ethereum/go-ethereum/crypto/bn256/cloudflare"
 
 	// "github.com/ethereum/go-ethereum/crypto/ed25519"
@@ -38,6 +38,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	metrics "github.com/ethereum/go-ethereum/metrics"
 	"gopkg.in/karalabe/cookiejar.v2/collections/prque"
+	"github.com/ethereum/go-ethereum/onrik/gomerkle"
 )
 
 // New creates an Istanbul consensus core
@@ -68,9 +69,11 @@ func New(backend istanbul.Backend, config *istanbul.Config) Engine {
 		pubKeys:               make(map[common.Address]*ed25519.Point),
 		blspubKeys:            make(map[common.Address]*bn256.G2),
 		blsmemkeys:            make(map[common.Address]*bn256.G1),
+		sigbytes:			   make(map[uint64][]byte),
 		addrIDMap:             make(map[common.Address]int),
 		idAddrMap:             make(map[int]common.Address),
 		nodeAggData:           make(map[uint64]*crypto.NodeData),
+		merkTree:              make(map[uint64]gomerkle.Tree),
 		nodePrivData:          make(map[common.Hash]*crypto.RoundData),
 		nodeRecData:           make(map[uint64]map[uint64]*crypto.RecData),
 		nodeDecidedRoot:       make(map[uint64]common.Hash),
@@ -104,13 +107,14 @@ type core struct {
 	local    bool
 
 	// drb
-	numNodes     int
+	numNodes     int 
 	threshold    int
 	startSeq     uint64
 	forwardSeq   uint64
 	commitmentCh chan struct{}    // channel to indicate enough commitment
 	privDataCh   chan common.Hash // channel to indicate that aggregate data has been received
 	merklePathCh chan uint64      // chaneel to indicate merkle path has arrived
+
 
 	// drb data
 	edKey  types.EdKey // secret key of the node
@@ -133,7 +137,8 @@ type core struct {
 	penAggData   map[common.Hash]*crypto.NodeData      // future usable aggregate data
 	penIndexSets map[common.Hash][]uint64              // index set of pending aggregated data
 	penPrivData  map[common.Hash]map[common.Address]*crypto.RoundData
-
+	sigbytes     map[uint64][]byte                      // byte representation of signed root
+	pubkeyagg    *bn256.G2                          
 	// for other nodes
 	nodeAggData           map[uint64]*crypto.NodeData           // height: [agg. poly. commit; agg. enc]
 	nodePrivData          map[common.Hash]*crypto.RoundData     // height: node's private data for aggregated commitment
@@ -142,6 +147,8 @@ type core struct {
 	nodeDecidedRoot       map[uint64]common.Hash                // height:Decided root
 	nodeConfShares        map[uint64]map[uint64]*ed25519.Point  // height: {index:share} @Vinith:Redundant data, can optimize
 	nodeDecidedCommitCert map[uint64]*istanbul.CommitCert       // height:  CommitCert
+	merkTree              map[uint64]gomerkle.Tree              // merkle tree from nodeagdata
+
 
 	backend               istanbul.Backend
 	events                *event.TypeMuxSubscription
@@ -214,6 +221,7 @@ func (c *core) InitKeys(vals []common.Address) error {
 		return err
 	}
 
+	var pubkeylist []*bn256.G2
 	for i, val := range vals {
 		c.addrIDMap[val] = i
 		c.idAddrMap[i] = val
@@ -221,8 +229,13 @@ func (c *core) InitKeys(vals []common.Address) error {
 		// log.Debug("Initializing pkeys", "addr", val, "idx", i)
 		c.blspubKeys[val] = types.G2StringToPoint(blspknodelist[i])
 		c.blsmemkeys[val] = types.G1StringToPoint(blsmknodelist[i])
+		pubkeylist = append(pubkeylist,c.blspubKeys[val])
 
 	}
+
+	apk, _ := crypto.KeyAgg(pubkeylist)
+	c.pubkeyagg = apk
+	
 
 	c.position = c.addrIDMap[c.address]
 

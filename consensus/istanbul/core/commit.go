@@ -21,7 +21,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/istanbul"
-	"github.com/ethereum/go-ethereum/crypto"
+	crypto "github.com/ethereum/go-ethereum/crypto"
 	bn256 "github.com/ethereum/go-ethereum/crypto/bn256/cloudflare"
 	"github.com/ethereum/go-ethereum/log"
 )
@@ -42,35 +42,39 @@ func (c *core) sendCommitForOldBlock(view *istanbul.View, digest common.Hash) {
 func (c *core) broadcastCommit(sub *istanbul.Subject, root common.Hash) {
 	logger := c.logger.New("state", c.state)
 
-	var pubkeys []*bn256.G2
+	// var pubkeys []*bn256.G2
 
-	// TODO(@vinith): Do this once and store it somewhere.
-	for _, value := range c.blspubKeys {
-		pubkeys = append(pubkeys, value)
-	}
-	if pubkeys == nil {
-		log.Debug("pubkeys")
-	}
-	if &c.blsKey.Skey == nil {
-		log.Debug("Skey")
-	}
-	if &c.blsKey.Mkey == nil {
-		log.Debug("Mkey")
-	}
+	// DoneTODO(@vinith): Do this once and store it somewhere.
+	// for _, value := range c.blspubKeys {
+	// 	pubkeys = append(pubkeys, value)
+	// }
+	// if pubkeys == nil {
+	// 	log.Debug("pubkeys")
+	// }
+	// if &c.blsKey.Skey == nil {
+	// 	log.Debug("Skey")
+	// }
+	// if &c.blsKey.Mkey == nil {
+	// 	log.Debug("Mkey")
+	// }
 
 	// log.Debug("Commit values", "root", root.Bytes(), "pubkeys", pubkeys, "Skey", c.blsKey.Skey, "Mkey", c.blsKey.Mkey)
-
-	sigbytes := []byte("hello")
-	if sub.View.Sequence.Uint64() > c.startSeq {
+	seq := sub.View.Sequence.Uint64()
+	sigbytes := []byte(" ")
+	c.nodeMu.RLock()
+	if seq > c.startSeq && len(c.sigbytes[seq])>0 {
 		/**
-		TODO(@vinith), Optimization to remove the siginig from critical path.
+		DoneTODO(@vinith), Optimization to remove the siginig from critical path.
 		1. Do the BLS signature as soon as you receive the root.
 		2. Do the signature asynchronously using a different thread (or core), store it in an hash map, and fetch it during the commit message
 		3. If the sigining thread is still running i.e., the hash map is empty, wait for it to become non-emtpy and try again.
 		**/
-		sig := crypto.BlsSign(pubkeys, &c.blsKey.Skey, &c.blsKey.Mkey, root.Bytes())
-		sigbytes = sig.Marshal()
+		// sig := crypto.BlsSign(pubkeys, &c.blsKey.Skey, &c.blsKey.Mkey, root.Bytes())
+		
+		sigbytes = c.sigbytes[seq]
+		
 	}
+	c.nodeMu.RUnlock()
 	encodedCommit, err := Encode(&istanbul.Commit{
 		// TODO(@sourav): Check what is subject?
 		Sub:  sub,
@@ -116,6 +120,13 @@ func (c *core) handleCommit(msg *message, src istanbul.Validator) error {
 		return err
 	}
 
+	seq := commit.Sub.View.Sequence.Uint64()
+
+	if seq > c.startSeq {
+		if err := c.verifyCommitSign(commit, src); err != nil {
+			return err
+		}
+	}
 	c.acceptCommit(msg, src)
 
 	// Commit the proposal once we have enough COMMIT messages and we are not in the Committed state.
@@ -137,6 +148,22 @@ func (c *core) handleCommit(msg *message, src istanbul.Validator) error {
 	return nil
 }
 
+func (c *core) verifyCommitSign(commit *istanbul.Commit, src istanbul.Validator) error {
+	var nodelist []int
+	nodelist = append(nodelist,int(c.addrIDMap[src.Address()]+1))
+	apk := c.pubkeyagg
+	pk := c.blspubKeys[src.Address()]
+
+	sig := new(bn256.G1)
+	_, err := sig.Unmarshal(commit.Sign)
+
+	if err !=nil || !crypto.Verify(nodelist,apk,commit.Root.Bytes(),pk,sig) {
+		log.Error("Invalid commit sig")
+		return errInconsistentCommitSig
+	}
+	return nil
+}
+
 // verifyCommit verifies if the received COMMIT message is equivalent to our subject
 func (c *core) verifyCommit(commit *istanbul.Commit, src istanbul.Validator) error {
 	logger := c.logger.New("from", src, "state", c.state)
@@ -146,6 +173,8 @@ func (c *core) verifyCommit(commit *istanbul.Commit, src istanbul.Validator) err
 		logger.Warn("Inconsistent subjects between commit and proposal", "expected", sub, "got", commit)
 		return errInconsistentSubject
 	}
+
+
 
 	return nil
 }

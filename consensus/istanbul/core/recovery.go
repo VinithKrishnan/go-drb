@@ -83,7 +83,9 @@ func (c *core) handleReqMerklePath(msg *message, src istanbul.Validator) error {
 	rSeq := rmsg.Seq
 
 	//@Vinith: Use Node Agg Data to get merkle root
+	c.nodeMu.RLock()
 	aData, ok := c.nodeAggData[rSeq]
+	c.nodeMu.RUnlock()
 
 	if !ok {
 		log.Error("No agg data", "number", rSeq)
@@ -96,9 +98,18 @@ func (c *core) handleReqMerklePath(msg *message, src istanbul.Validator) error {
 	// recData := crypto.ReconstructData(encEval, c.edKey.Pkey, c.edKey.Skey)
 	// irecData := istanbul.RecDataEncode(recData)
 
-	// TODO(@vinith): Optimize to create the tree only once.
-	_, tree := crypto.AggrMerkleRoot(aData.IndexSet, aData.Points, aData.EncEvals)
+	// DoneTODO(@vinith): Optimize to create the tree only once.
+	// _, tree := crypto.AggrMerkleRoot(aData.IndexSet, aData.Points, aData.EncEvals)
+	if _, ok := c.merkTree[rSeq]; !ok {
+		// log.Error("No decided root")
+		_, tree := crypto.AggrMerkleRoot(aData.IndexSet, aData.Points, aData.EncEvals)
+		c.merkTree[aData.Round] = tree
+	}
+
+	tree := c.merkTree[rSeq]
 	leafindex := len(aData.IndexSet) + c.addrIDMap[c.Address()]
+
+	
 
 	proof := tree.GetProof(leafindex)
 	iproof := istanbul.MerkleProofEncode(proof)
@@ -175,21 +186,31 @@ func (c *core) handleReqMultiSig(msg *message, src istanbul.Validator) error {
 		log.Error("No decided root")
 	}
 	log.Info("Decided Root", "value", c.nodeDecidedRoot[rSeq])
+	root:= c.nodeDecidedRoot[rSeq]
+	c.nodeMu.RUnlock()
 
 	if _, ok := c.nodeDecidedCommitCert[rSeq]; !ok {
-		log.Error("No decided CommitCert")
+		// log.Error("No decided CommitCert")
+		nodelist, aggpk, aggsign := c.GenerateAggSig()
+		aggpkbytes := aggpk.Marshal()
+		aggsigbytes := aggsign.Marshal()
+		c.nodeDecidedCommitCert[rSeq] = &istanbul.CommitCert{
+			Nodelist: nodelist,
+			Aggpk:    aggpkbytes,
+			Aggsig:   aggsigbytes,
+		}
 	}
 
 	log.Info("Decided Cert", "value", *c.nodeDecidedCommitCert[rSeq])
 
-	msigData := istanbul.MultiSigEncode(rSeq, c.nodeDecidedRoot[rSeq], *c.nodeDecidedCommitCert[rSeq])
+	msigData := istanbul.MultiSigEncode(rSeq, root, *c.nodeDecidedCommitCert[rSeq])
 	msig, err := Encode(&msigData)
 
 	if err != nil {
-		log.Error("Failed to encode MultiSig", "error", err, "seq", rSeq, "root", c.nodeDecidedRoot[rSeq], "commitcert", c.nodeDecidedCommitCert[rSeq])
+		log.Error("Failed to encode MultiSig", "error", err, "seq", rSeq, "root", root, "commitcert", c.nodeDecidedCommitCert[rSeq])
 		// return errFailedEncodeMultiSig
 	}
-	c.nodeMu.RUnlock()
+	
 
 	c.sendToNode(src.Address(), &message{
 		Code: msgMultiSig,

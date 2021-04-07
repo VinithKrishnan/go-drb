@@ -361,6 +361,7 @@ func (c *core) handleAggregate(sender common.Address, aData *crypto.NodeData) er
 	c.nodeMu.Lock()
 	c.nodeAggData[aData.Round] = aData
 
+
 	c.nodeMu.Unlock()
 	log.Info("Handled Aggregate", "number", aData.Round, "root", aData.Root)
 	return nil
@@ -419,6 +420,13 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 
 	if seq > c.startSeq {
 
+		// create a bls sign on root
+		go func() {
+		sig := crypto.BlsSign(c.pubkeyagg.Marshal(), &c.blsKey.Skey, &c.blsKey.Mkey, root.Bytes())
+		c.sigbytes[seq] = sig.Marshal()
+		} ()
+		
+
 		// Create a NodeData using the Preprepare message
 		aData = crypto.NodeData{
 			Round:    seq,
@@ -427,6 +435,8 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 			EncEvals: istanbul.BytesToPoints(preprepare.Proposal.EncEvals()),
 			IndexSet: indexset,
 		}
+
+
 
 		if err := c.handleAggregate(src.Address(), &aData); err != nil {
 			// log.Error("Error in HandleAggregate", "src", src.Address(), "rnd", aData.Round, "err", err)

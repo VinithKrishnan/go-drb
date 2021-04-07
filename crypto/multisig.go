@@ -107,11 +107,11 @@ func KeyAgg(pklist []*bn256.G2) (*bn256.G2, []*big.Int) {
 	return apk, exponents
 }
 
-func BlsSign(pklist []*bn256.G2, sk *big.Int, memkey *bn256.G1, message []byte) *bn256.G1 {
-	// TODO(@vinith): Do one time setups only once and store it
+func BlsSign(pkaggbytes []byte, sk *big.Int, memkey *bn256.G1, message []byte) *bn256.G1 {
+	// DoneTODO(@vinith): Do one time setups only once and store it
 	// somewhere.
-	apk, _ := KeyAgg(pklist)
-	apkbytes := apk.Marshal()
+	// apk, _ := KeyAgg(pklist)
+	apkbytes := pkaggbytes
 	// TODO(@vinith), low priority:
 	// Check if existing library already does that.
 	hashmessage := append(apkbytes, message...)
@@ -159,6 +159,8 @@ func Verify(nodelist []int, apk *bn256.G2, message []byte, aggpk *bn256.G2, aggs
 	return true
 
 }
+
+
 
 // func main() {
 // 	// var pklist [] *bn256.G2
