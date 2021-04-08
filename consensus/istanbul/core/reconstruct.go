@@ -71,6 +71,15 @@ func (c *core) sendReconstruct(seq uint64, digest common.Hash) {
 			Code: msgReconstruct,
 			Msg:  reconstruct,
 		})
+
+		dataLen:= len(reconstruct)
+		sdata := c.logdir + "sdata"
+		sdataf, err := os.OpenFile(sdata, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			log.Error("Can't open sdataf file", "error", err)
+		}
+		fmt.Fprintln(sdataf, msgReconstruct, dataLen, -1, c.position, c.Now())
+		sdataf.Close()
 		log.Info("Broadcast recontstuction message", "number", seq)
 	} else {
 		log.Info("No private message received from leader yet.")

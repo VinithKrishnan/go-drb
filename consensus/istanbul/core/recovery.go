@@ -1,6 +1,8 @@
 package core
 
 import (
+	"os"
+	"fmt"
 	"crypto/sha256"
 	"github.com/ethereum/go-ethereum/consensus/istanbul"
 
@@ -165,6 +167,7 @@ func (c *core) handleReqMultiSig(msg *message, src istanbul.Validator) error {
 	root := c.nodeDecidedRoot[rSeq]
 	c.nodeMu.RUnlock()
 
+	
 	if _, ok := c.nodeDecidedCommitCert[rSeq]; !ok {
 		// log.Error("No decided CommitCert")
 		nodelist, aggpk, aggsign := c.GenerateAggSig()
@@ -190,7 +193,16 @@ func (c *core) handleReqMultiSig(msg *message, src istanbul.Validator) error {
 		Code: msgMultiSig,
 		Msg:  msig,
 	})
+	cert := c.nodeDecidedCommitCert[rSeq]
+	dataLen := len(cert.Nodelist)+len(cert.Aggpk)+len(cert.Aggsig)
 
+	sdata := c.logdir + "sdata"
+	sdataf, err := os.OpenFile(sdata, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Error("Can't open sdataf file", "error", err)
+	}
+	fmt.Fprintln(sdataf, msgMultiSig, dataLen, c.addrIDMap[src.Address()], c.position, c.Now())
+	sdataf.Close()
 	log.Debug("Sent multsig to ", "node", index, "for number:", rSeq)
 
 	// check whether aggregate data is available or not

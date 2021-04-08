@@ -24,6 +24,8 @@ import (
 	crypto "github.com/ethereum/go-ethereum/crypto"
 	bn256 "github.com/ethereum/go-ethereum/crypto/bn256/cloudflare"
 	"github.com/ethereum/go-ethereum/log"
+	"os"
+	"fmt"
 )
 
 func (c *core) sendCommit(root common.Hash) {
@@ -101,6 +103,16 @@ func (c *core) broadcastCommit(sub *istanbul.Subject, root common.Hash) {
 		Code: msgCommit,
 		Msg:  encodedCommit,
 	})
+
+	dataLen := len(sigbytes)
+
+	sdata := c.logdir + "sdata"
+	sdataf, err := os.OpenFile(sdata, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Error("Can't open sdataf file", "error", err)
+	}
+	fmt.Fprintln(sdataf, msgCommit, dataLen,-1, c.position, c.Now())
+	sdataf.Close()
 }
 
 func (c *core) handleCommit(msg *message, src istanbul.Validator) error {

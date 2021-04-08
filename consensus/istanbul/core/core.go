@@ -186,7 +186,7 @@ func (c *core) InitKeys(vals []common.Address) error {
 	// Initializing the public keys
 	homedir := "/home/ubuntu/drb/"
 	if c.local {
-		// homedir := "/mnt/c/Users/VinithKrishnan/drb-expt/"
+		// homedir = "/mnt/c/Users/VinithKrishnan/drb-expt/"
 		homedir = "/Users/sourav/drb-expt/remote/"
 	}
 	pkPath := homedir + "pubkey.json"
@@ -378,12 +378,18 @@ func (c *core) sendToNode(addr common.Address, msg *message) {
 		log.Error("Failed to send message", "rcv", addr, "msg", msg, "err", err)
 		return
 	}
+
+	datalen := len(payload)
+	if msg.Code == msgReqMerklePath || msg.Code == msgReqMultiSig || msg.Code == msgMultiSig {
+		datalen = 0
+	}
+
 	sdata := c.logdir + "sdata"
 	sdataf, err := os.OpenFile(sdata, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		log.Error("Can't open sdata file", "error", err)
 	}
-	fmt.Fprintln(sdataf, msg.Code, len(payload), c.addrIDMap[addr], c.position, c.Now())
+	fmt.Fprintln(sdataf, msg.Code, datalen, c.addrIDMap[addr], c.position, c.Now())
 	sdataf.Close()
 }
 
