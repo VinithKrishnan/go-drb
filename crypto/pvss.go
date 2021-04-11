@@ -125,6 +125,34 @@ func Random() *ed25519.Scalar {
 	return BintToScalar(v)
 }
 
+func SchnorrSign(pubkey *ed25519.Point,message []byte,secretkey *ed25519.Scalar) (*ed25519.Scalar,*ed25519.Scalar) {
+	k := Random()
+	r := ed25519.NewIdentityPoint().ScalarMult(k, H)
+	var bytestring []byte
+	bytestring = append(bytestring, r.Bytes()...)
+	bytestring = append(bytestring, message...)
+	hash := sha512.New()
+	hash.Write(bytestring)
+	bs := hash.Sum(nil)
+	e := ScalarReduce(bs)
+	s := ed25519.NewScalar().Subtract(k, ed25519.NewScalar().Multiply(secretkey, e))
+	return s,e
+}
+
+func SchnorrSignVerify(s *ed25519.Scalar,e *ed25519.Scalar, pubkey *ed25519.Point,message []byte) (bool) {
+	p := ed25519.NewIdentityPoint().ScalarMult(s, H)
+	q := ed25519.NewIdentityPoint().ScalarMult(e, pubkey)
+	v := ed25519.NewIdentityPoint().Add(p,q)
+	var bytestring []byte
+	bytestring = append(bytestring, v.Bytes()...)
+	bytestring = append(bytestring, message...)
+	hash := sha512.New()
+	hash.Write(bytestring)
+	bs := hash.Sum(nil)
+	ev := ScalarReduce(bs)
+	return e.Equal(ev) == 1
+}
+
 // RandomWithSecret returns a polynomial with random coefficients from Zq.
 // p(x) = c_0 + c_1*x + ... c_{degree} * x^{degree}
 func RandomWithSecret(degree int, secret *ed25519.Scalar) Polynomial {

@@ -21,8 +21,8 @@ var p = bigFromBase10("650005496956466037327964387423599057428253581076230035718
 var tempG2 = new(bn256.G2).ScalarBaseMult(bigFromBase10("0"))
 var tempG1 = new(bn256.G1).ScalarBaseMult(bigFromBase10("0"))
 
-var NumNodes = 4
-var MemKeys []*bn256.G1
+// var NumNodes = 4
+
 
 // var AggPubKey *bn256.G2
 
@@ -34,18 +34,23 @@ var MemKeys []*bn256.G1
 // 	// fmt.Println(v.String())
 // 	return v
 // }
-var PublicKeys []*bn256.G2
-var SecretKeys []*big.Int
 
-func GroupSetup() {
 
-	for i := 0; i < NumNodes; i++ {
+func GroupSetup(numnodes int) ([]*bn256.G2,[]*big.Int,[]*bn256.G1){
+
+	var publickeys []*bn256.G2
+	var secretkeys []*big.Int
+	var memkeys    []*bn256.G1
+
+
+	for i := 0; i < numnodes; i++ {
 		sk, pk, _ := bn256.RandomG2(rand.Reader)
-		PublicKeys = append(PublicKeys, pk)
-		SecretKeys = append(SecretKeys, sk)
+		publickeys = append(publickeys, pk)
+		secretkeys = append(secretkeys, sk)
 	}
-	apk, exponents := KeyAgg(PublicKeys)
-	MemKeys = MemKeySetup(apk, exponents, SecretKeys)
+	apk, exponents := KeyAgg(publickeys)
+	memkeys = MemKeySetup(apk, exponents, secretkeys)
+	return publickeys,secretkeys,memkeys
 
 }
 
@@ -161,6 +166,9 @@ func Verify(nodelist []int, apk *bn256.G2, message []byte, aggpk *bn256.G2, aggs
 }
 
 
+// var PublicKeys []*bn256.G2
+// var SecretKeys []*big.Int
+// var MemKeys []*bn256.G1
 
 // func main() {
 // 	// var pklist [] *bn256.G2
@@ -175,7 +183,7 @@ func Verify(nodelist []int, apk *bn256.G2, message []byte, aggpk *bn256.G2, aggs
 // 	// fmt.Println(new(bn256.G2).ScalarMult(tempG2,bigFromBase10("0")))
 // 	// fmt.Println(new(bn256.G2).ScalarMult(tempG2,bigFromBase10("0")))
 
-// 	GroupSetup()
+// 	PublicKeys,SecretKeys,MemKeys =  GroupSetup()
 // 	var SignList []*bn256.G1
 // 	var pubkeys []*bn256.G2
 // 	message := []byte{byte(0)}

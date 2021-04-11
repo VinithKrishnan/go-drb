@@ -9,7 +9,8 @@ import (
 	// "crypto/sha512"
 	// "crypto/sha256"
 	// "ed25519"
-	ed25519 "filippo.io/edwards25519"
+	// ed25519 "filippo.io/edwards25519"
+	ed25519 "github.com/ethereum/go-ethereum/filippo.io/edwards25519"
 	"math/big"
 	// "reflect"
 	"testing"
@@ -75,6 +76,23 @@ func BenchmarkCommitmentGeneration(b *testing.B) {
 	}
 
 }
+// time taken to generate encrypted shares
+func BenchmarkEncryptedShareGeneration(b *testing.B) {
+	num_receivers := NUM_NODES
+	poly := RandomPoly(RECOVERY_THRESHOLD - 1)
+	var shares []ed25519.Scalar
+	for i := 1; i <= num_receivers; i++ {
+		shares = append(shares, *poly.Eval(i))
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var encrypted_shares []ed25519.Point
+		for j := 0; j < num_receivers; j++ {
+			encrypted_shares = append(encrypted_shares, *ed25519.NewIdentityPoint().ScalarMult(&shares[j], &public_keys[j]))
+		}
+	}
+
+}
 
 // time taken to genertae proofs
 func BenchmarkProofGeneration(b *testing.B) {
@@ -98,6 +116,24 @@ func BenchmarkProofGeneration(b *testing.B) {
 		_ = ProveShareCorrectness(shares,commitments, encrypted_shares, public_keys)
 	}
 
+}
+
+func BenchmarkSchnorrSign(b *testing.B) {
+	message := []byte("Sample Benchmark Message")
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_,_ = SchnorrSign(&public_keys[0],message,&secret_keys[0])
+	}
+}
+
+func BenchmarkSchnorrVerify(b *testing.B) {
+	message := []byte("Sample Benchmark Message")
+	s,e :=SchnorrSign(&public_keys[0],message,&secret_keys[0])
+	pubkey := public_keys[0]
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = SchnorrSignVerify(s,e,&pubkey,message)
+	}
 }
 
 // time taken for aggregation
@@ -291,7 +327,7 @@ func TestVerification(t *testing.T) {
 
 
 		// TODO:Remove first parameter from ReconstructData in pvss.go
-		recdata := ReconstructData(G,enc_share,pk,sk)
+		recdata := ReconstructData(enc_share,pk,sk)
 		// TODO: Changed starting index of for loop in ValidateReconstrcut to i = 0
 		if !ValidateReconstruct(pk,enc_share,recdata.DecShare,recdata.Proof) {
 			t.Errorf("Share encryption proof not working")
